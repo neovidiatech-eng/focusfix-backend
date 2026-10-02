@@ -3,10 +3,11 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../lib/logger';
+import { requireAuth, AuthenticatedRequest } from '../auth/auth.middleware';
 
 const router = Router();
 
-// Validation Schema for Booking Submission
+// Validation Schema for Public Booking Submission
 const createBookingSchema = z.object({
   name: z.string().min(2),
   phone: z.string().regex(/^(\+20|0)?1[0125][0-9]{8}$/),
@@ -28,10 +29,12 @@ const createBookingSchema = z.object({
   turnstileToken: z.string().optional(),
 });
 
-// GET /api/v1/bookings/availability?area_id=&from=&to=
+// -------------------------------------------------------------------
+// PUBLIC: GET /api/v1/bookings/availability
+// -------------------------------------------------------------------
 router.get('/availability', async (req: Request, res: Response) => {
   try {
-    const { area_id, from, to } = req.query;
+    const { area_id } = req.query;
     if (!area_id) {
       return res.status(400).json({ error: 'area_id is required' });
     }
@@ -56,7 +59,9 @@ router.get('/availability', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/v1/bookings
+// -------------------------------------------------------------------
+// PUBLIC: POST /api/v1/bookings
+// -------------------------------------------------------------------
 router.post('/', async (req: Request, res: Response) => {
   try {
     const idempotencyKey = req.headers['idempotency-key'] as string;
@@ -77,18 +82,14 @@ router.post('/', async (req: Request, res: Response) => {
 
     const validated = createBookingSchema.parse(req.body);
 
-    // Format phone to E.164 (+201...)
     let cleanPhone = validated.phone.replace(/\D/g, '');
     if (cleanPhone.startsWith('01')) cleanPhone = '20' + cleanPhone.slice(1);
     if (!cleanPhone.startsWith('+')) cleanPhone = '+' + cleanPhone;
 
-    // Transaction for booking creation
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Fetch area and transport fee
       const area = await tx.area.findUnique({ where: { id: validated.areaId } });
       if (!area || !area.is_active) throw new Error('Selected area is invalid');
 
-      // 2. Fetch prices for services
       const prices = await tx.price.findMany({
         where: {
           model_id: validated.modelId,
@@ -117,14 +118,12 @@ router.post('/', async (req: Request, res: Response) => {
       const transportFee = Number(area.transport_fee || 0);
       const estimatedTotal = servicesTotal + transportFee;
 
-      // 3. Upsert customer
       const customer = await tx.customer.upsert({
         where: { phone: cleanPhone },
         update: { name: validated.name, email: validated.email },
         create: { phone: cleanPhone, name: validated.name, email: validated.email },
       });
 
-      // 4. Generate sequential booking number FM-YYYY-XXXXX
       const currentYear = new Date().getFullYear();
       const counter = await tx.counter.upsert({
         where: { year: currentYear },
@@ -134,7 +133,6 @@ router.post('/', async (req: Request, res: Response) => {
       const bookingNumber = `FM-${currentYear}-${String(counter.value).padStart(5, '0')}`;
       const confirmationToken = crypto.randomBytes(24).toString('hex');
 
-      // 5. Create booking
       const newBooking = await tx.booking.create({
         data: {
           booking_number: bookingNumber,
@@ -185,7 +183,9 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/v1/bookings/confirmation/:token
+// -------------------------------------------------------------------
+// PUBLIC: GET /api/v1/bookings/confirmation/:token
+// -------------------------------------------------------------------
 router.get('/confirmation/:token', async (req: Request, res: Response) => {
   try {
     const booking = await prisma.booking.findUnique({
@@ -218,6 +218,131 @@ router.get('/confirmation/:token', async (req: Request, res: Response) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch confirmation details' });
+  }
+});
+
+// -------------------------------------------------------------------
+// ADMIN: GET /api/v1/bookings/admin/all
+// -------------------------------------------------------------------
+router.get('/admin/all', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { status, search, page = '1', limit = '20' } = req.query;
+
+    const where: any = {};
+    if (status && status !== 'all') {
+      where.status = status;
+    }
+    if (search) {
+      const q = String(search);
+      where.OR = [
+        { booking_number: { contains: q, mode: 'insensitive' } },
+        { customer: { name: { contains: q, mode: 'insensitive' } } },
+        { customer: { phone: { contains: q } } },
+      ];
+    }
+
+    const take = parseInt(String(limit), 10);
+    const skip = (parseInt(String(page), 10) - 1) * take;
+
+    const [bookings, total] = await Promise.all([
+      prisma.booking.findMany({
+        where,
+        include: {
+          customer: true,
+          model: true,
+          area: true,
+          services: { include: { service: true } },
+        },
+        orderBy: { created_at: 'desc' },
+        skip,
+        take,
+      }),
+      prisma.booking.count({ where }),
+    ]);
+
+    res.json({
+      data: bookings,
+      meta: {
+        total,
+        page: parseInt(String(page), 10),
+        totalPages: Math.ceil(total / take),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch admin bookings' });
+  }
+});
+
+// -------------------------------------------------------------------
+// ADMIN: GET /api/v1/bookings/admin/:id (Booking details & timeline)
+// -------------------------------------------------------------------
+router.get('/admin/:id', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const booking = await prisma.booking.findUnique({
+      where: { id: req.params.id },
+      include: {
+        customer: true,
+        model: { include: { type: true } },
+        area: true,
+        services: { include: { service: true } },
+        events: { orderBy: { created_at: 'desc' } },
+      },
+    });
+
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    res.json(booking);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch booking details' });
+  }
+});
+
+// -------------------------------------------------------------------
+// ADMIN: PATCH /api/v1/bookings/admin/:id/status
+// -------------------------------------------------------------------
+router.patch('/admin/:id/status', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { status, note, totalFinal } = req.body;
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const b = await tx.booking.update({
+        where: { id: req.params.id },
+        data: {
+          status,
+          total_final: totalFinal ? Number(totalFinal) : undefined,
+        },
+      });
+
+      await tx.bookingEvent.create({
+        data: {
+          booking_id: b.id,
+          status,
+          note: note || `تغيرت حالة الحجز إلى: ${status}`,
+          created_by: req.user?.email || 'admin',
+        },
+      });
+
+      return b;
+    });
+
+    res.json({ success: true, booking: updated });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message || 'Failed to update booking status' });
+  }
+});
+
+// -------------------------------------------------------------------
+// ADMIN: PATCH /api/v1/bookings/admin/:id/notes
+// -------------------------------------------------------------------
+router.patch('/admin/:id/notes', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { notes } = req.body;
+    const b = await prisma.booking.update({
+      where: { id: req.params.id },
+      data: { notes },
+    });
+    res.json({ success: true, notes: b.notes });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update notes' });
   }
 });
 

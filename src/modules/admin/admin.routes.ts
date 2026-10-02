@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../../lib/prisma';
+import { requireAuth } from '../auth/auth.middleware';
 
 const router = Router();
 
@@ -23,15 +24,17 @@ router.get('/badges', async (req: Request, res: Response) => {
 });
 
 // GET /api/v1/admin/stats
-router.get('/stats', async (req: Request, res: Response) => {
+router.get('/stats', requireAuth, async (req: Request, res: Response) => {
   try {
     const totalBookings = await prisma.booking.count();
     const pendingBookings = await prisma.booking.count({ where: { status: 'pending' } });
+    const confirmedBookings = await prisma.booking.count({ where: { status: 'confirmed' } });
     const completedBookings = await prisma.booking.count({ where: { status: 'completed' } });
 
     res.json({
       totalBookings,
       pendingBookings,
+      confirmedBookings,
       completedBookings,
       estimatedRevenue: 194500,
     });
@@ -40,22 +43,16 @@ router.get('/stats', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/v1/admin/bookings
-router.get('/bookings', async (req: Request, res: Response) => {
+// GET /api/v1/admin/audit-log
+router.get('/audit-log', requireAuth, async (req: Request, res: Response) => {
   try {
-    const bookings = await prisma.booking.findMany({
-      include: {
-        customer: true,
-        model: true,
-        area: true,
-        services: { include: { service: true } },
-      },
+    const logs = await prisma.auditLog.findMany({
       orderBy: { created_at: 'desc' },
-      take: 50,
+      take: 100,
     });
-    res.json(bookings);
+    res.json(logs);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch admin bookings' });
+    res.status(500).json({ error: 'Failed to fetch audit log' });
   }
 });
 

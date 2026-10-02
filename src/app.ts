@@ -14,6 +14,7 @@ import contactRouter from './modules/contact/contact.routes';
 import blogRouter from './modules/blog/blog.routes';
 import settingsRouter from './modules/settings/settings.routes';
 import adminRouter from './modules/admin/admin.routes';
+import authRouter from './modules/auth/auth.routes';
 
 export function createApp(): Express {
   const app = express();
@@ -59,6 +60,7 @@ export function createApp(): Express {
   apiV1.use('/blog', blogRouter);
   apiV1.use('/settings', settingsRouter);
   apiV1.use('/admin', adminRouter);
+  apiV1.use('/auth', authRouter);
 
   app.use('/api/v1', apiV1);
 
