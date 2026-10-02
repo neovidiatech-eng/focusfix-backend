@@ -21,7 +21,9 @@ router.get('/public', async (req: Request, res: Response) => {
       slot_capacity: '3',
       banner_enabled: 'true',
       banner_text: 'خصم حصري 15% على صيانة أجهزة آيفون اليوم + فحص فوري وقطع غيار أصلية بضمان عام كامل',
+      banner_text_en: 'Exclusive 15% OFF iPhone repairs today + instant inspection & genuine parts with 1-Year warranty',
       banner_badge: 'خدمة الطوارئ متوفرة الآن 24/7',
+      banner_badge_en: 'Emergency 24/7 Service Available',
       banner_link: '/book',
       banner_bg_color: 'from-amber-500 via-amber-400 to-amber-500',
     };
