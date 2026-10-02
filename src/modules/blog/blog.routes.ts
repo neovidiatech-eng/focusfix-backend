@@ -127,4 +127,17 @@ router.put('/admin/posts/:id', requireAuth, async (req: AuthenticatedRequest, re
   }
 });
 
+// ADMIN: DELETE /api/v1/blog/admin/posts/:id
+router.delete('/admin/posts/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const post = await prisma.blogPost.delete({
+      where: { id: req.params.id },
+    });
+    triggerRevalidation(['blog', `blog:${post.slug}`]).catch(() => {});
+    res.json({ success: true, id: req.params.id });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message || 'Failed to delete post' });
+  }
+});
+
 export default router;
