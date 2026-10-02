@@ -1,0 +1,510 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ----------------------------------------------------
+// Enums
+// ----------------------------------------------------
+
+enum PriceStatus {
+  available
+  included
+  on_request
+  unavailable
+}
+
+enum BookingStatus {
+  pending
+  confirmed
+  assigned
+  on_the_way
+  in_progress
+  completed
+  cancelled
+  no_show
+}
+
+enum QuoteRequestType {
+  model_request
+  area_request
+}
+
+enum PostStatus {
+  draft
+  scheduled
+  published
+  archived
+}
+
+enum UserRole {
+  super_admin
+  operation_manager
+  support_agent
+  technician
+  content_editor
+}
+
+// ----------------------------------------------------
+// Catalog & Pricing
+// ----------------------------------------------------
+
+model DeviceType {
+  id             String        @id @default(uuid())
+  slug           String        @unique
+  name_ar        String
+  name_en        String
+  order          Int           @default(0)
+  is_active      Boolean       @default(true)
+  is_coming_soon Boolean       @default(false)
+  seo_h1_ar      String?
+  seo_h1_en      String?
+  intro_ar       String?
+  intro_en       String?
+  seo_title      String?
+  seo_desc       String?
+  created_at     DateTime      @default(now())
+  updated_at     DateTime      @updatedAt
+
+  models         DeviceModel[]
+
+  @@map("device_types")
+}
+
+model DeviceModel {
+  id           String      @id @default(uuid())
+  type_id      String
+  slug         String      @unique
+  name         String
+  series_ar    String?
+  series_en    String?
+  intro_ar     String?
+  intro_en     String?
+  release_year Int?
+  image_url    String?
+  order        Int         @default(0)
+  is_active    Boolean     @default(true)
+  created_at   DateTime    @default(now())
+  updated_at   DateTime    @updatedAt
+
+  type         DeviceType  @relation(fields: [type_id], references: [id])
+  prices       Price[]
+  bookings     Booking[]
+
+  @@index([type_id])
+  @@map("device_models")
+}
+
+model Service {
+  id                    String    @id @default(uuid())
+  slug                  String    @unique
+  name_ar               String
+  name_en               String
+  icon                  String?
+  estimated_minutes     Int       @default(30)
+  default_warranty_days Int       @default(180)
+  order                 Int       @default(0)
+  is_active             Boolean   @default(true)
+  created_at            DateTime  @default(now())
+  updated_at            DateTime  @updatedAt
+
+  prices                Price[]
+  booking_services      BookingService[]
+
+  @@map("services")
+}
+
+model Price {
+  id                      String      @id @default(uuid())
+  model_id                String
+  service_id              String
+  price                   Decimal?    @db.Decimal(10, 2)
+  discount_price          Decimal?    @db.Decimal(10, 2)
+  warranty_days           Int         @default(180)
+  status                  PriceStatus @default(available)
+  included_with_service_id String?
+  note_ar                 String?
+  note_en                 String?
+  created_at              DateTime    @default(now())
+  updated_at              DateTime    @updatedAt
+
+  model                   DeviceModel @relation(fields: [model_id], references: [id])
+  service                 Service     @relation(fields: [service_id], references: [id])
+  history                 PriceHistory[]
+
+  @@unique([model_id, service_id])
+  @@index([model_id])
+  @@index([service_id])
+  @@map("prices")
+}
+
+model PriceHistory {
+  id         String   @id @default(uuid())
+  price_id   String
+  old_price  Decimal? @db.Decimal(10, 2)
+  new_price  Decimal? @db.Decimal(10, 2)
+  changed_by String?
+  created_at DateTime @default(now())
+
+  price_rel  Price    @relation(fields: [price_id], references: [id], onDelete: Cascade)
+
+  @@index([price_id])
+  @@map("price_history")
+}
+
+// ----------------------------------------------------
+// Areas & Scheduling
+// ----------------------------------------------------
+
+model Area {
+  id             String          @id @default(uuid())
+  slug           String          @unique
+  name_ar        String
+  name_en        String
+  city_ar        String          @default("القاهرة")
+  city_en        String          @default("Cairo")
+  transport_fee  Decimal         @default(0.00) @db.Decimal(10, 2)
+  order          Int             @default(0)
+  is_active      Boolean         @default(true)
+  intro_ar       String?
+  intro_en       String?
+  seo_title      String?
+  seo_desc       String?
+  created_at     DateTime        @default(now())
+  updated_at     DateTime        @updatedAt
+
+  time_slots     TimeSlot[]
+  slot_exceptions SlotException[]
+  bookings       Booking[]
+
+  @@map("areas")
+}
+
+model TimeSlot {
+  id           String          @id @default(uuid())
+  area_id      String
+  day_of_week  Int             // 0 = Sunday, 6 = Saturday
+  start_time   String          // "10:00"
+  end_time     String          // "12:00"
+  max_bookings Int             @default(3)
+  is_active    Boolean         @default(true)
+  created_at   DateTime        @default(now())
+  updated_at   DateTime        @updatedAt
+
+  area         Area            @relation(fields: [area_id], references: [id])
+  exceptions   SlotException[]
+  bookings     Booking[]
+
+  @@index([area_id])
+  @@map("time_slots")
+}
+
+model SlotException {
+  id           String    @id @default(uuid())
+  area_id      String?
+  slot_id      String?
+  date         DateTime  @db.Date
+  is_closed    Boolean   @default(false)
+  max_override Int?
+  reason       String?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  area         Area?     @relation(fields: [area_id], references: [id])
+  slot         TimeSlot? @relation(fields: [slot_id], references: [id])
+
+  @@index([area_id])
+  @@index([date])
+  @@map("slot_exceptions")
+}
+
+// ----------------------------------------------------
+// Customers & Bookings
+// ----------------------------------------------------
+
+model Customer {
+  id         String    @id @default(uuid())
+  phone      String    @unique // E.164 (+201...)
+  name       String
+  email      String
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+
+  bookings   Booking[]
+
+  @@index([phone])
+  @@map("customers")
+}
+
+model Booking {
+  id                     String           @id @default(uuid())
+  booking_number         String           @unique // FM-YYYY-XXXXX
+  customer_id            String
+  model_id               String
+  area_id                String
+  slot_id                String?
+  slot_date              DateTime         @db.Date
+  slot_label_snapshot    String
+  address                String
+  property_type          String?          // "home" | "office"
+  location_lat           Float?
+  location_lng           Float?
+  transport_fee_snapshot Decimal          @default(0.00) @db.Decimal(10, 2)
+  services_total         Decimal          @db.Decimal(10, 2)
+  estimated_total        Decimal          @db.Decimal(10, 2)
+  total_final            Decimal?         @db.Decimal(10, 2)
+  status                 BookingStatus    @default(pending)
+  locale                 String           @default("ar")
+  whatsapp_number        String?
+  notes                  String?
+  source                 String           @default("web") // "web" | "manual"
+  attribution            Json?
+  idempotency_key        String?          @unique
+  confirmation_token     String?          @unique
+  first_seen_at          DateTime?
+  created_at             DateTime         @default(now())
+  updated_at             DateTime         @updatedAt
+
+  customer               Customer         @relation(fields: [customer_id], references: [id])
+  model                  DeviceModel      @relation(fields: [model_id], references: [id])
+  area                   Area             @relation(fields: [area_id], references: [id])
+  slot                   TimeSlot?        @relation(fields: [slot_id], references: [id])
+  services               BookingService[]
+  events                 BookingEvent[]
+  notifications          NotificationLog[]
+
+  @@index([customer_id])
+  @@index([booking_number])
+  @@index([status])
+  @@index([created_at])
+  @@map("bookings")
+}
+
+model BookingService {
+  id                     String   @id @default(uuid())
+  booking_id             String
+  service_id             String
+  price_snapshot         Decimal  @db.Decimal(10, 2)
+  discount_snapshot      Decimal? @db.Decimal(10, 2)
+  warranty_days_snapshot Int      @default(180)
+  minutes_snapshot       Int      @default(30)
+  price_pending          Boolean  @default(false)
+
+  booking                Booking  @relation(fields: [booking_id], references: [id], onDelete: Cascade)
+  service                Service  @relation(fields: [service_id], references: [id])
+
+  @@index([booking_id])
+  @@map("booking_services")
+}
+
+model BookingEvent {
+  id         String   @id @default(uuid())
+  booking_id String
+  status     String
+  note       String?
+  created_by String?
+  created_at DateTime @default(now())
+
+  booking    Booking  @relation(fields: [booking_id], references: [id], onDelete: Cascade)
+
+  @@index([booking_id])
+  @@map("booking_events")
+}
+
+// ----------------------------------------------------
+// Communication & Messages
+// ----------------------------------------------------
+
+model ContactMessage {
+  id          String   @id @default(uuid())
+  name        String
+  phone       String
+  email       String?
+  message     String
+  status      String   @default("new") // new, read, replied, archived
+  attribution Json?
+  locale      String   @default("ar")
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@map("contact_messages")
+}
+
+model QuoteRequest {
+  id          String           @id @default(uuid())
+  type        QuoteRequestType
+  name        String
+  phone       String
+  details     String?
+  status      String           @default("new")
+  attribution Json?
+  created_at  DateTime         @default(now())
+  updated_at  DateTime         @updatedAt
+
+  @@map("quote_requests")
+}
+
+// ----------------------------------------------------
+// Blog (CMS)
+// ----------------------------------------------------
+
+model BlogPost {
+  id                  String         @id @default(uuid())
+  slug                String         @unique
+  title_ar            String
+  title_en            String
+  content_json        Json?
+  content_html        String
+  excerpt_ar          String?
+  excerpt_en          String?
+  reading_minutes     Int            @default(4)
+  status              PostStatus     @default(draft)
+  canonical_url       String?
+  noindex             Boolean        @default(false)
+  og_image_url        String?
+  faq_json            Json?
+  views_count         Int            @default(0)
+  published_at        DateTime?
+  scheduled_at        DateTime?
+  current_revision_id String?
+  created_at          DateTime       @default(now())
+  updated_at          DateTime       @updatedAt
+
+  revisions           BlogRevision[]
+
+  @@index([slug])
+  @@index([status])
+  @@map("blog_posts")
+}
+
+model BlogRevision {
+  id           String    @id @default(uuid())
+  post_id      String
+  content_json Json
+  created_by   String?
+  created_at   DateTime  @default(now())
+
+  post         BlogPost  @relation(fields: [post_id], references: [id], onDelete: Cascade)
+
+  @@index([post_id])
+  @@map("blog_revisions")
+}
+
+// ----------------------------------------------------
+// Operations, Settings & Media
+// ----------------------------------------------------
+
+model Media {
+  id         String   @id @default(uuid())
+  url        String
+  alt_ar     String?
+  alt_en     String?
+  width      Int?
+  height     Int?
+  mime       String
+  size       Int
+  created_by String?
+  created_at DateTime @default(now())
+
+  @@map("media")
+}
+
+model Redirect {
+  id          String   @id @default(uuid())
+  from_path   String   @unique
+  to_path     String
+  status_code Int      @default(301)
+  created_at  DateTime @default(now())
+
+  @@map("redirects")
+}
+
+model Counter {
+  id    String @id @default(uuid())
+  year  Int    @unique
+  value Int    @default(0)
+
+  @@map("counters")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  name          String
+  email         String   @unique
+  password_hash String
+  role          UserRole @default(super_admin)
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  @@map("users")
+}
+
+model FAQ {
+  id          String   @id @default(uuid())
+  question_ar String
+  question_en String
+  answer_ar   String
+  answer_en   String
+  group       String   @default("general")
+  order       Int      @default(0)
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@map("faqs")
+}
+
+model PageContent {
+  id         String   @id @default(uuid())
+  key        String   @unique
+  content_ar String
+  content_en String
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("pages_content")
+}
+
+model Setting {
+  id         String   @id @default(uuid())
+  key        String   @unique
+  value      String
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("settings")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  action     String
+  details    String
+  user_id    String?
+  ip_address String?
+  created_at DateTime @default(now())
+
+  @@index([created_at])
+  @@map("audit_log")
+}
+
+model NotificationLog {
+  id         String   @id @default(uuid())
+  channel    String   // "email" | "whatsapp" | "sms"
+  recipient  String
+  template   String
+  status     String   @default("pending") // "pending" | "sent" | "failed"
+  payload    Json?
+  booking_id String?
+  created_at DateTime @default(now())
+
+  booking    Booking? @relation(fields: [booking_id], references: [id])
+
+  @@index([booking_id])
+  @@index([status])
+  @@map("notifications_log")
+}
