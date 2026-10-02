@@ -218,6 +218,29 @@ async function main() {
     }
   }
 
+  // 7. Seed Settings (including Top Announcement Bar)
+  const defaultSettings = [
+    { key: 'phone', value: '+201009911934' },
+    { key: 'whatsapp', value: '201009911934' },
+    { key: 'working_hours_mode', value: '12h' },
+    { key: 'working_hours_start', value: '10:00' },
+    { key: 'working_hours_end', value: '18:00' },
+    { key: 'slot_capacity', value: '3' },
+    { key: 'banner_enabled', value: 'true' },
+    { key: 'banner_text', value: 'خصم حصري 15% على صيانة أجهزة آيفون اليوم + فحص فوري وقطع غيار أصلية بضمان عام كامل' },
+    { key: 'banner_badge', value: 'خدمة الطوارئ متوفرة الآن 24/7' },
+    { key: 'banner_link', value: '/book' },
+    { key: 'banner_bg_color', value: 'amber' },
+  ];
+
+  for (const s of defaultSettings) {
+    await prisma.setting.upsert({
+      where: { key: s.key },
+      update: { value: s.value },
+      create: { key: s.key, value: s.value },
+    });
+  }
+
   console.log('✅ FocusFix Seeding completed successfully!');
 }
 

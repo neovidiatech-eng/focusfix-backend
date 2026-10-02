@@ -19,6 +19,11 @@ router.get('/public', async (req: Request, res: Response) => {
       working_hours_start: '10:00',
       working_hours_end: '18:00',
       slot_capacity: '3',
+      banner_enabled: 'true',
+      banner_text: 'خصم حصري 15% على صيانة أجهزة آيفون اليوم + فحص فوري وقطع غيار أصلية بضمان عام كامل',
+      banner_badge: 'خدمة الطوارئ متوفرة الآن 24/7',
+      banner_link: '/book',
+      banner_bg_color: 'from-amber-500 via-amber-400 to-amber-500',
     };
     settings.forEach((s) => {
       settingsMap[s.key] = s.value;
