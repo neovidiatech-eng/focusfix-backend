@@ -352,32 +352,106 @@ model QuoteRequest {
 // Blog (CMS)
 // ----------------------------------------------------
 
-model BlogPost {
-  id                  String         @id @default(uuid())
-  slug                String         @unique
-  title_ar            String
-  title_en            String
-  content_json        Json?
-  content_html        String
-  excerpt_ar          String?
-  excerpt_en          String?
-  reading_minutes     Int            @default(4)
-  status              PostStatus     @default(draft)
-  canonical_url       String?
-  noindex             Boolean        @default(false)
-  og_image_url        String?
-  faq_json            Json?
-  views_count         Int            @default(0)
-  published_at        DateTime?
-  scheduled_at        DateTime?
-  current_revision_id String?
-  created_at          DateTime       @default(now())
-  updated_at          DateTime       @updatedAt
+model BlogCategory {
+  id             String         @id @default(uuid())
+  slug           String         @unique
+  name_ar        String
+  name_en        String
+  description_ar String?
+  description_en String?
+  parent_id      String?
+  parent         BlogCategory?  @relation("CategoryHierarchy", fields: [parent_id], references: [id], onDelete: SetNull)
+  children       BlogCategory[] @relation("CategoryHierarchy")
+  posts          BlogPost[]
+  created_at     DateTime       @default(now())
+  updated_at     DateTime       @updatedAt
 
-  revisions           BlogRevision[]
+  @@map("blog_categories")
+}
+
+model BlogTag {
+  id         String        @id @default(uuid())
+  slug       String        @unique
+  name_ar    String
+  name_en    String
+  posts      BlogPostTag[]
+  created_at DateTime      @default(now())
+  updated_at DateTime      @updatedAt
+
+  @@map("blog_tags")
+}
+
+model BlogPostTag {
+  post_id String
+  tag_id  String
+  post    BlogPost @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  tag     BlogTag  @relation(fields: [tag_id], references: [id], onDelete: Cascade)
+
+  @@id([post_id, tag_id])
+  @@map("blog_post_tags")
+}
+
+model BlogAuthor {
+  id         String     @id @default(uuid())
+  slug       String     @unique
+  name_ar    String
+  name_en    String
+  avatar_url String?
+  bio_ar     String?
+  bio_en     String?
+  role_title String?
+  posts      BlogPost[]
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  @@map("blog_authors")
+}
+
+model BlogPost {
+  id                     String         @id @default(uuid())
+  slug                   String         @unique
+  title_ar               String
+  title_en               String
+  content_json           Json?
+  content_html           String
+  content_html_en        String?
+  excerpt_ar             String?
+  excerpt_en             String?
+  category_id            String?
+  author_id              String?
+  featured_image         String?
+  featured_image_alt     String?
+  featured_image_caption String?
+  focus_keyword          String?
+  meta_title_ar          String?
+  meta_title_en          String?
+  meta_desc_ar           String?
+  meta_desc_en           String?
+  canonical_url          String?
+  robots_index           Boolean        @default(true)
+  robots_follow          Boolean        @default(true)
+  related_post_ids       Json?
+  reading_minutes        Int            @default(4)
+  status                 PostStatus     @default(draft)
+  noindex                Boolean        @default(false)
+  og_image_url           String?
+  faq_json               Json?
+  views_count            Int            @default(0)
+  published_at           DateTime?
+  scheduled_at           DateTime?
+  current_revision_id    String?
+  created_at             DateTime       @default(now())
+  updated_at             DateTime       @updatedAt
+
+  category               BlogCategory?  @relation(fields: [category_id], references: [id], onDelete: SetNull)
+  author                 BlogAuthor?    @relation(fields: [author_id], references: [id], onDelete: SetNull)
+  tags                   BlogPostTag[]
+  revisions              BlogRevision[]
 
   @@index([slug])
   @@index([status])
+  @@index([category_id])
+  @@index([author_id])
   @@map("blog_posts")
 }
 
