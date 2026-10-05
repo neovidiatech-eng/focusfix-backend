@@ -3,7 +3,6 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { logger } from './lib/logger';
-
 // Modules
 import healthRouter from './modules/health/health.routes';
 import catalogRouter from './modules/catalog/catalog.routes';
