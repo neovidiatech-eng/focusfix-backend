@@ -1,0 +1,73 @@
+services:
+  api:
+    image: ${API_IMAGE:-focusfix-api:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: focusfix-api
+    restart: unless-stopped
+    ports:
+      - "${PORT:-4000}:4000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - RUN_MIGRATIONS=${RUN_MIGRATIONS:-true}
+      - SEED_DATABASE=${SEED_DATABASE:-false}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-focusfix}?schema=public
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - focusfix-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: focusfix-postgres
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-focusfix}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-focusfix}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - focusfix-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: focusfix-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - focusfix-network
+
+volumes:
+  postgres_data:
+    name: focusfix_postgres_data
+  redis_data:
+    name: focusfix_redis_data
+
+networks:
+  focusfix-network:
+    name: focusfix_network
+    driver: bridge
