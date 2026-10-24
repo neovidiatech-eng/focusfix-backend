@@ -1,14 +1,8 @@
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
+import { healthController } from './health.controller';
 
 const router = Router();
 
-router.get('/', (req: Request, res: Response) => {
-  res.json({
-    status: 'ok',
-    service: 'focusfix-api',
-    version: '1.0.0',
-    timestamp: new Date().toISOString(),
-  });
-});
+router.get('/', (req, res) => healthController.getHealth(req, res));
 
 export default router;

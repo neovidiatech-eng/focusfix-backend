@@ -1,38 +1,40 @@
-# FocusFix API (`focusfix-api`)
+# FocusFix Backend API
 
-الـ Backend REST API المركزي لمنصة **FocusFix** — بنمط Modular Monolith لخدمة الموقع العام (`focusfix-web`) ولوحة التحكم الإدارية (`focusfix-admin`).
+RESTful API backend for FocusFix mobile maintenance & repair platform.
+Built with Node.js, Express, TypeScript, and Prisma ORM with PostgreSQL.
 
-- **الرابط والدومين:** [https://api.focusfix.net](https://api.focusfix.net)
-- **التقنيات المستخدمة:**
-  - Node.js 20+ (LTS) & Express
-  - TypeScript (Strict Mode)
-  - PostgreSQL 16 + Prisma ORM
-  - Redis + BullMQ (Background Jobs: Email & Outbox)
-  - Zod (Input validation & OpenAPI schema)
-  - Pino (Structured Logging)
-  - Helmet & CORS whitelist
+## المميزات والمعمارية
+- بنية قائمة على الوحدات المنفصلة (Feature-Based Architecture).
+- طبقة تحكم (Controllers) وطبقة خدمات (Services) منفصلة لكل وحدة.
+- توثيق OpenAPI / Swagger تلقائي.
+- دعم التحقق من المدخلات باستخدام Zod.
+- أمان متقدم (Rate Limiting, Helmet, Secure CORS, JWT with Refresh Tokens).
+- سجل تدقيق مالي وإداري (Audit Logging) لكل تغيير في الأسعار والحجوزات.
 
-## الوحدات البرمجية (Modules)
-- `auth`: إدارة الجلسات، التوكنات، وصلاحيات الأدمن.
-- `catalog`: أنواع الأجهزة والموديلات والخدمات.
-- `pricing`: مصفوفة الأسعار، الخصومات، والضمان لكل خدمة.
-- `areas`: مناطق التغطية ورسوم الانتقال والمواعيد (Slots & Exceptions).
-- `bookings`: خوارزمية الحجز من 4 خطوات، التحقق من السعة داخل Transaction، وتوليد كود الحجز `FM-YYYY-XXXXX`.
-- `contact`: رسائل التواصل وطلبات الأسعار للموديلات والمناطق غير المدرجة.
-- `blog`: إدارة المقالات ومراجعاتها ومحتوى الـ CMS.
+## الوحدات البرمجية الأساسية (Modules)
+- `auth`: تسجيل الدخول، إصدار الرموز الأمنية (JWT & Refresh Token)، وإدارة الجلسات.
+- `bookings`: دورة حياة الحجز كاملة (إنشاء، جدول مواعيد، استعلام، وتتبع الحجز).
+- `pricing`: مصفوفة الأسعار، خصومات، فترات الضمان، وسجل تعديل الأسعار.
+- `catalog`: تصنيف الأجهزة، الموديلات المدعومة، والخدمات المتاحة.
+- `areas`: المناطق المغطاة، رسوم الانتقال، ونوافذ المواعيد المتاحة.
+- `contact`: استقبال رسائل الدعم ونماذج طلب تسعير مخصص.
+- `blog`: نظام مدونة ومقالات متكامل يدعم الـ SEO، التصنيفات، الوسوم، والمؤلفين.
 - `settings`: إعدادات المنصة، أرقام الهواتف، وأكواد التحليلات.
 - `admin`: إحصائيات KPIs، عدادات التنبيهات (Badges Polling)، وسجل التدقيق.
 
 ## أوامر التشغيل المحلية (Local)
 
 ```bash
-pnpm install
+npm install
 cp .env.example .env
-pnpm prisma:generate
-pnpm prisma:migrate
-pnpm seed
-pnpm dev
+docker compose up -d
+npx prisma generate
+npx prisma db push
+npm run seed
+npm run dev
 ```
+
+The local API runs on `http://localhost:4000` and uses PostgreSQL on port `5432` and Redis on port `6379`.
 
 ## التشغيل باستخدام Docker & Docker Compose
 
@@ -75,6 +77,3 @@ docker compose -f docker-compose.dev.yml up --build
 - `SSH_PORT`: منفذ الـ SSH (افتراضي: `22`).
 - `DEPLOY_PATH`: مسار المشروع على السيرفر (افتراضي: `/var/www/focusfix-api`).
 - `ENV_FILE` *(اختياري ولكن يُفضّل)*: محتوى ملف `.env` الكامل للإنتاج ليتم نسخه وتحديثه على السيرفر تلقائياً.
-
-
-
