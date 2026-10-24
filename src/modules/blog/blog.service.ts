@@ -654,10 +654,12 @@ export class BlogService {
   }
 
   async restorePostFromTrash(id: string) {
-    return prisma.blogPost.update({
+    const post = await prisma.blogPost.update({
       where: { id },
       data: { status: 'draft' },
     });
+    triggerRevalidation(['blog', `blog:${post.slug}`]).catch(() => {});
+    return post;
   }
 
   async deletePost(id: string) {
@@ -669,6 +671,7 @@ export class BlogService {
   async bulkActions(ids: string[], action: string, value?: string) {
     if (action === 'delete') {
       await prisma.blogPost.deleteMany({ where: { id: { in: ids } } });
+      triggerRevalidation(['blog']).catch(() => {});
       return { count: ids.length };
     }
     if (action === 'trash') {
@@ -676,6 +679,7 @@ export class BlogService {
         where: { id: { in: ids } },
         data: { status: 'archived' },
       });
+      triggerRevalidation(['blog']).catch(() => {});
       return { count: ids.length };
     }
     if (action === 'change_status' && value) {
@@ -686,6 +690,7 @@ export class BlogService {
           published_at: value === 'published' ? new Date() : undefined,
         },
       });
+      triggerRevalidation(['blog']).catch(() => {});
       return { count: ids.length };
     }
     if (action === 'change_category' && value) {
@@ -693,6 +698,7 @@ export class BlogService {
         where: { id: { in: ids } },
         data: { category_id: value },
       });
+      triggerRevalidation(['blog']).catch(() => {});
       return { count: ids.length };
     }
     throw new Error('Unsupported bulk action');

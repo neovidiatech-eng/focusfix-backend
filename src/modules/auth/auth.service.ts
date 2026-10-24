@@ -25,7 +25,7 @@ export class AuthService {
       role: user.role,
     };
 
-    const accessToken = jwt.sign(payload, JWT_ACCESS_SECRET, { expiresIn: '15m' });
+    const accessToken = jwt.sign(payload, JWT_ACCESS_SECRET, { expiresIn: '7d' });
     const refreshToken = jwt.sign(payload, JWT_REFRESH_SECRET, { expiresIn: '30d' });
 
     // Log login in audit_log
@@ -58,7 +58,7 @@ export class AuthService {
       name: decoded.name,
       role: decoded.role,
     };
-    const accessToken = jwt.sign(payload, JWT_ACCESS_SECRET, { expiresIn: '15m' });
+    const accessToken = jwt.sign(payload, JWT_ACCESS_SECRET, { expiresIn: '7d' });
     return { accessToken };
   }
 
