@@ -1,4 +1,5 @@
 import { prisma } from '../../lib/prisma';
+import { triggerRevalidation } from '../../lib/revalidate';
 
 export class CatalogService {
   async getDeviceTypes() {
@@ -41,7 +42,7 @@ export class CatalogService {
       .replace(/[^a-z0-9\u0600-\u06FF]+/g, '-')
       .replace(/^-|-$/g, '');
 
-    return prisma.deviceModel.create({
+    const model = await prisma.deviceModel.create({
       data: {
         name: data.name,
         slug,
@@ -51,10 +52,12 @@ export class CatalogService {
         release_year: data.release_year ? Number(data.release_year) : 2024,
       },
     });
+    triggerRevalidation(['catalog', 'prices']).catch(() => {});
+    return model;
   }
 
   async updateModel(id: string, data: any) {
-    return prisma.deviceModel.update({
+    const model = await prisma.deviceModel.update({
       where: { id },
       data: {
         ...(data.name ? { name: data.name } : {}),
@@ -65,11 +68,15 @@ export class CatalogService {
         ...(data.release_year ? { release_year: Number(data.release_year) } : {}),
       },
     });
+    triggerRevalidation(['catalog', 'prices']).catch(() => {});
+    return model;
   }
 
   async deleteModel(id: string) {
     await prisma.price.deleteMany({ where: { model_id: id } });
-    return prisma.deviceModel.delete({ where: { id } });
+    const model = await prisma.deviceModel.delete({ where: { id } });
+    triggerRevalidation(['catalog', 'prices']).catch(() => {});
+    return model;
   }
 
   async createService(data: {
@@ -84,7 +91,7 @@ export class CatalogService {
       .replace(/[^a-z0-9\u0600-\u06FF]+/g, '-')
       .replace(/^-|-$/g, '');
 
-    return prisma.service.create({
+    const service = await prisma.service.create({
       data: {
         name_ar: data.name_ar,
         name_en: data.name_en || data.name_ar,
@@ -92,11 +99,15 @@ export class CatalogService {
         estimated_minutes: data.estimated_minutes ? Number(data.estimated_minutes) : 30,
       },
     });
+    triggerRevalidation(['catalog', 'services', 'prices']).catch(() => {});
+    return service;
   }
 
   async deleteService(id: string) {
     await prisma.price.deleteMany({ where: { service_id: id } });
-    return prisma.service.delete({ where: { id } });
+    const service = await prisma.service.delete({ where: { id } });
+    triggerRevalidation(['catalog', 'services', 'prices']).catch(() => {});
+    return service;
   }
 }
 

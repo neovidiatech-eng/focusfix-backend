@@ -16,6 +16,9 @@ router.post('/admin', requireAuth, (req, res) => areasController.createArea(req,
 // ADMIN: PUT /api/v1/areas/admin/:id
 router.put('/admin/:id', requireAuth, (req, res) => areasController.updateArea(req, res));
 
+// ADMIN: DELETE /api/v1/areas/admin/:id
+router.delete('/admin/:id', requireAuth, (req, res) => areasController.deleteArea(req, res));
+
 // ADMIN: GET /api/v1/areas/admin/:id/slots
 router.get('/admin/:id/slots', requireAuth, (req, res) => areasController.getAreaSlots(req, res));
 

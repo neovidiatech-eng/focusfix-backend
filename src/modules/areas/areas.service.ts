@@ -66,6 +66,12 @@ export class AreasService {
     return area;
   }
 
+  async deleteArea(id: string) {
+    const area = await prisma.area.delete({ where: { id } });
+    triggerRevalidation(['areas', 'prices']).catch(() => {});
+    return area;
+  }
+
   async getAreaSlots(areaId: string) {
     return prisma.timeSlot.findMany({
       where: { area_id: areaId },

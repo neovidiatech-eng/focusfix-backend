@@ -8,6 +8,18 @@ export async function triggerRevalidation(tags: string[], paths: string[] = []) 
   if (tags.some((t) => t.startsWith('blog')) && !finalPaths.includes('/blog')) {
     finalPaths.push('/blog');
   }
+  if (tags.some((t) => t.includes('prices') || t.includes('pricing')) && !finalPaths.includes('/prices')) {
+    finalPaths.push('/prices');
+  }
+  if (tags.some((t) => t.includes('areas')) && !finalPaths.includes('/areas')) {
+    finalPaths.push('/areas');
+  }
+  if (tags.some((t) => t.includes('catalog') || t.includes('services')) && !finalPaths.includes('/services')) {
+    finalPaths.push('/services');
+  }
+  if (tags.some((t) => t.includes('catalog') || t.includes('areas') || t.includes('prices')) && !finalPaths.includes('/book')) {
+    finalPaths.push('/book');
+  }
 
   try {
     const res = await fetch(`${webUrl}/api/revalidate`, {

@@ -38,6 +38,15 @@ export class AreasController {
     }
   }
 
+  async deleteArea(req: Request, res: Response) {
+    try {
+      const area = await areasService.deleteArea(req.params.id);
+      res.json({ success: true, deleted: area });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'Failed to delete area' });
+    }
+  }
+
   async getAreaSlots(req: Request, res: Response) {
     try {
       const slots = await areasService.getAreaSlots(req.params.id);
