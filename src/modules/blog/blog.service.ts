@@ -387,6 +387,24 @@ export class BlogService {
       throw new Error('Slug is already in use by another article');
     }
 
+    let validCategoryId: string | null = null;
+    if (data.category_id) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.category_id);
+      if (isUuid) {
+        const cat = await prisma.blogCategory.findUnique({ where: { id: data.category_id } });
+        if (cat) validCategoryId = cat.id;
+      }
+    }
+
+    let validAuthorId: string | null = null;
+    if (data.author_id) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.author_id);
+      if (isUuid) {
+        const auth = await prisma.blogAuthor.findUnique({ where: { id: data.author_id } });
+        if (auth) validAuthorId = auth.id;
+      }
+    }
+
     const post = await prisma.blogPost.create({
       data: {
         title_ar: data.title_ar,
@@ -397,8 +415,8 @@ export class BlogService {
         content_json: data.content_json || {},
         excerpt_ar: data.excerpt_ar,
         excerpt_en: data.excerpt_en,
-        category_id: data.category_id || null,
-        author_id: data.author_id || null,
+        category_id: validCategoryId,
+        author_id: validAuthorId,
         featured_image: data.featured_image,
         featured_image_alt: data.featured_image_alt,
         featured_image_caption: data.featured_image_caption,
@@ -481,6 +499,30 @@ export class BlogService {
       }).catch(() => {});
     }
 
+    let validCategoryId = existing.category_id;
+    if (data.category_id !== undefined) {
+      validCategoryId = null;
+      if (data.category_id) {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.category_id);
+        if (isUuid) {
+          const cat = await prisma.blogCategory.findUnique({ where: { id: data.category_id } });
+          if (cat) validCategoryId = cat.id;
+        }
+      }
+    }
+
+    let validAuthorId = existing.author_id;
+    if (data.author_id !== undefined) {
+      validAuthorId = null;
+      if (data.author_id) {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.author_id);
+        if (isUuid) {
+          const auth = await prisma.blogAuthor.findUnique({ where: { id: data.author_id } });
+          if (auth) validAuthorId = auth.id;
+        }
+      }
+    }
+
     const updated = await prisma.blogPost.update({
       where: { id },
       data: {
@@ -492,8 +534,8 @@ export class BlogService {
         content_json: data.content_json ?? existing.content_json,
         excerpt_ar: data.excerpt_ar ?? existing.excerpt_ar,
         excerpt_en: data.excerpt_en ?? existing.excerpt_en,
-        category_id: data.category_id !== undefined ? (data.category_id || null) : existing.category_id,
-        author_id: data.author_id !== undefined ? (data.author_id || null) : existing.author_id,
+        category_id: validCategoryId,
+        author_id: validAuthorId,
         featured_image: data.featured_image ?? existing.featured_image,
         featured_image_alt: data.featured_image_alt ?? existing.featured_image_alt,
         featured_image_caption: data.featured_image_caption ?? existing.featured_image_caption,
