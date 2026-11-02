@@ -2,7 +2,11 @@ import { logger } from './logger';
 
 export async function triggerRevalidation(tags: string[], paths: string[] = []) {
   const webUrl = process.env.WEB_URL || 'https://focusfix-public.vercel.app';
-  const secret = process.env.REVALIDATE_SECRET || 'focusfix_revalidate_secret';
+  const secret = process.env.REVALIDATE_SECRET;
+  if (!secret) {
+    logger.warn({ tags }, 'REVALIDATE_SECRET is not set; skipping web revalidation');
+    return;
+  }
 
   const finalPaths = [...paths];
   if (tags.some((t) => t.startsWith('blog')) && !finalPaths.includes('/blog')) {

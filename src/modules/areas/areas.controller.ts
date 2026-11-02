@@ -1,3 +1,4 @@
+import { sendError } from '../../lib/errors';
 import { Request, Response } from 'express';
 import { areasService } from './areas.service';
 
@@ -7,7 +8,7 @@ export class AreasController {
       const areas = await areasService.getActiveAreas();
       res.json(areas);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch areas' });
+      sendError(res, error, 'Failed to fetch areas');
     }
   }
 
@@ -16,7 +17,7 @@ export class AreasController {
       const area = await areasService.getAreaBySlug(req.params.slug);
       res.json(area);
     } catch (error: any) {
-      res.status(404).json({ error: error.message || 'Area not found' });
+      sendError(res, error, 'Area not found', 404);
     }
   }
 
@@ -25,7 +26,7 @@ export class AreasController {
       const area = await areasService.createArea(req.body);
       res.status(201).json(area);
     } catch (error: any) {
-      res.status(400).json({ error: error.message || 'Failed to create area' });
+      sendError(res, error, 'Failed to create area', 400);
     }
   }
 
@@ -34,7 +35,7 @@ export class AreasController {
       const area = await areasService.updateArea(req.params.id, req.body);
       res.json(area);
     } catch (error: any) {
-      res.status(400).json({ error: error.message || 'Failed to update area' });
+      sendError(res, error, 'Failed to update area', 400);
     }
   }
 
@@ -43,7 +44,7 @@ export class AreasController {
       const area = await areasService.deleteArea(req.params.id);
       res.json({ success: true, deleted: area });
     } catch (error: any) {
-      res.status(400).json({ error: error.message || 'Failed to delete area' });
+      sendError(res, error, 'Failed to delete area', 400);
     }
   }
 
@@ -52,7 +53,7 @@ export class AreasController {
       const slots = await areasService.getAreaSlots(req.params.id);
       res.json(slots);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch slots' });
+      sendError(res, error, 'Failed to fetch slots');
     }
   }
 
@@ -61,7 +62,42 @@ export class AreasController {
       const exception = await areasService.createSlotException(req.body);
       res.status(201).json(exception);
     } catch (error: any) {
-      res.status(400).json({ error: error.message || 'Failed to create exception' });
+      sendError(res, error, 'Failed to create exception', 400);
+    }
+  }
+
+  async getAdminAreas(_req: Request, res: Response) {
+    try {
+      res.json(await areasService.getAdminAreas());
+    } catch (error) {
+      sendError(res, error, 'Failed to fetch areas');
+    }
+  }
+
+  async replaceAreaSlots(req: Request, res: Response) {
+    try {
+      const slots = Array.isArray(req.body?.slots) ? req.body.slots : null;
+      if (!slots) return res.status(400).json({ error: 'slots array is required' });
+      res.json(await areasService.replaceAreaSlots(req.params.id, slots));
+    } catch (error) {
+      sendError(res, error, 'Failed to save slots');
+    }
+  }
+
+  async getSlotExceptions(req: Request, res: Response) {
+    try {
+      res.json(await areasService.getSlotExceptions(req.params.id));
+    } catch (error) {
+      sendError(res, error, 'Failed to fetch exceptions');
+    }
+  }
+
+  async deleteSlotException(req: Request, res: Response) {
+    try {
+      await areasService.deleteSlotException(req.params.exceptionId);
+      res.json({ success: true });
+    } catch (error) {
+      sendError(res, error, 'Failed to delete exception');
     }
   }
 }

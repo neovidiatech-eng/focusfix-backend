@@ -1,3 +1,4 @@
+import { sendError } from '../../lib/errors';
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { pricingService } from './pricing.service';
@@ -26,8 +27,7 @@ export class PricingController {
       const result = await pricingService.getPublicMatrix(typeSlug);
       res.json(result);
     } catch (error: any) {
-      const status = error.message.includes('not found') ? 404 : 500;
-      res.status(status).json({ error: error.message || 'Failed to fetch pricing matrix' });
+      sendError(res, error, 'Failed to fetch pricing matrix', 404);
     }
   }
 
@@ -37,8 +37,7 @@ export class PricingController {
       const result = await pricingService.getAdminMatrix(typeSlug);
       res.json(result);
     } catch (error: any) {
-      const status = error.message.includes('not found') ? 404 : 500;
-      res.status(status).json({ error: error.message || 'Failed to fetch admin matrix' });
+      sendError(res, error, 'Failed to fetch admin matrix', 404);
     }
   }
 
@@ -52,7 +51,7 @@ export class PricingController {
       res.json({ success: true, count });
     } catch (error: any) {
       logger.error({ error }, 'Error in bulk updating prices');
-      res.status(400).json({ error: error.message || 'Failed to update prices' });
+      sendError(res, error, 'Failed to update prices', 400);
     }
   }
 
@@ -66,7 +65,7 @@ export class PricingController {
       const result = await pricingService.importPrices(rows, dryRun);
       res.json({ success: true, ...result });
     } catch (error: any) {
-      res.status(500).json({ error: error.message || 'Import failed' });
+      sendError(res, error, 'Import failed', 500);
     }
   }
 }

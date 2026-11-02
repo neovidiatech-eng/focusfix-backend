@@ -1,3 +1,4 @@
+import { sendError } from '../../lib/errors';
 import { Request, Response } from 'express';
 import { catalogService } from './catalog.service';
 
@@ -7,7 +8,7 @@ export class CatalogController {
       const types = await catalogService.getDeviceTypes();
       res.json(types);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch device types' });
+      sendError(res, error, 'Failed to fetch device types');
     }
   }
 
@@ -17,7 +18,7 @@ export class CatalogController {
       const models = await catalogService.getDeviceModels(type ? String(type) : undefined);
       res.json(models);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch device models' });
+      sendError(res, error, 'Failed to fetch device models');
     }
   }
 
@@ -26,7 +27,7 @@ export class CatalogController {
       const services = await catalogService.getServices();
       res.json(services);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch services' });
+      sendError(res, error, 'Failed to fetch services');
     }
   }
 
@@ -35,7 +36,7 @@ export class CatalogController {
       const model = await catalogService.createModel(req.body);
       res.status(201).json(model);
     } catch (error: any) {
-      res.status(400).json({ error: error.message || 'Failed to create model' });
+      sendError(res, error, 'Failed to create model', 400);
     }
   }
 
@@ -44,16 +45,16 @@ export class CatalogController {
       const model = await catalogService.updateModel(req.params.id, req.body);
       res.json(model);
     } catch (error: any) {
-      res.status(400).json({ error: error.message || 'Failed to update model' });
+      sendError(res, error, 'Failed to update model', 400);
     }
   }
 
   async deleteModel(req: Request, res: Response) {
     try {
-      await catalogService.deleteModel(req.params.id);
-      res.json({ success: true, id: req.params.id });
+      const result = await catalogService.deleteModel(req.params.id);
+      res.json({ success: true, id: req.params.id, ...result });
     } catch (error: any) {
-      res.status(400).json({ error: error.message || 'Failed to delete model' });
+      sendError(res, error, 'Failed to delete model', 400);
     }
   }
 
@@ -62,16 +63,32 @@ export class CatalogController {
       const service = await catalogService.createService(req.body);
       res.status(201).json(service);
     } catch (error: any) {
-      res.status(400).json({ error: error.message || 'Failed to create service' });
+      sendError(res, error, 'Failed to create service', 400);
     }
   }
 
   async deleteService(req: Request, res: Response) {
     try {
-      await catalogService.deleteService(req.params.id);
-      res.json({ success: true, id: req.params.id });
+      const result = await catalogService.deleteService(req.params.id);
+      res.json({ success: true, id: req.params.id, ...result });
     } catch (error: any) {
-      res.status(400).json({ error: error.message || 'Failed to delete service' });
+      sendError(res, error, 'Failed to delete service', 400);
+    }
+  }
+
+  async getAdminCatalog(_req: Request, res: Response) {
+    try {
+      res.json(await catalogService.getAdminCatalog());
+    } catch (error) {
+      sendError(res, error, 'Failed to fetch catalog');
+    }
+  }
+
+  async updateService(req: Request, res: Response) {
+    try {
+      res.json(await catalogService.updateService(req.params.id, req.body));
+    } catch (error) {
+      sendError(res, error, 'Failed to update service');
     }
   }
 }

@@ -12,8 +12,18 @@ export interface AuthenticatedRequest extends Request {
   user?: AuthUser;
 }
 
-export const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || 'focusfix_jwt_access_secret_2026';
-export const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'focusfix_jwt_refresh_secret_2026';
+function requireSecret(name: string, devFallback: string): string {
+  const value = process.env[name];
+  if (value && !value.startsWith('your_')) return value;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(`${name} must be set in production`);
+  }
+  return devFallback;
+}
+
+// Without real secrets anyone could sign admin tokens, so production refuses to start
+export const JWT_ACCESS_SECRET = requireSecret('JWT_ACCESS_SECRET', 'focusfix_dev_access_secret');
+export const JWT_REFRESH_SECRET = requireSecret('JWT_REFRESH_SECRET', 'focusfix_dev_refresh_secret');
 
 export function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;

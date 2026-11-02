@@ -260,7 +260,8 @@ model Booking {
   status                 BookingStatus    @default(pending)
   locale                 String           @default("ar")
   whatsapp_number        String?
-  notes                  String?
+  notes                  String?          // customer notes from the booking form
+  internal_notes         String?          // staff-only notes from the dashboard
   source                 String           @default("web") // "web" | "manual"
   attribution            Json?
   idempotency_key        String?          @unique
@@ -281,6 +282,7 @@ model Booking {
   @@index([booking_number])
   @@index([status])
   @@index([created_at])
+  @@index([slot_date])
   @@map("bookings")
 }
 

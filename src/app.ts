@@ -19,6 +19,8 @@ export function createApp(): Express {
   const app = express();
 
   // Security Headers
+  // Behind a reverse proxy (nginx / Docker) so rate limits see the real client IP
+  app.set('trust proxy', 1);
   app.use(helmet());
 
   // CORS Configuration
@@ -47,6 +49,17 @@ export function createApp(): Express {
     message: { error: 'Too many requests, please try again later.' },
   });
   app.use(globalLimiter);
+
+  // Stricter limits on public writes and login to slow down spam / brute force
+  const writeLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    message: { error: 'محاولات كثيرة، يرجى المحاولة لاحقاً.' },
+  });
+  app.post('/api/v1/bookings', writeLimiter);
+  app.post('/api/v1/contact', writeLimiter);
+  app.post('/api/v1/contact/quotes', writeLimiter);
+  app.post('/api/v1/auth/login', writeLimiter);
 
   // API v1 Routes
   const apiV1 = express.Router();

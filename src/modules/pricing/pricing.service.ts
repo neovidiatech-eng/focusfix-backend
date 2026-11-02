@@ -152,7 +152,8 @@ export class PricingService {
           },
         });
 
-        if (existing && existing.price !== item.price) {
+        const oldPrice = existing?.price == null ? null : Number(existing.price);
+        if (existing && oldPrice !== (item.price ?? null)) {
           await tx.priceHistory.create({
             data: {
               price_id: updated.id,
@@ -233,6 +234,11 @@ export class PricingService {
           newPrice: row.price,
         });
         if (!dryRun) {
+          if (Number(existing.price) !== Number(row.price)) {
+            await prisma.priceHistory.create({
+              data: { price_id: existing.id, old_price: existing.price, new_price: row.price, changed_by: 'excel_import' },
+            });
+          }
           await prisma.price.update({
             where: { id: existing.id },
             data: {

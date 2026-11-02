@@ -1,3 +1,4 @@
+import { sendError } from '../../lib/errors';
 import { Request, Response } from 'express';
 import { blogService } from './blog.service';
 import { AuthenticatedRequest } from '../auth/auth.middleware';
@@ -17,7 +18,7 @@ export class BlogController {
       });
       res.json(result);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch blog posts' });
+      sendError(res, error, 'Failed to fetch blog posts');
     }
   }
 
@@ -40,7 +41,7 @@ export class BlogController {
 
       res.json(post);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch post' });
+      sendError(res, error, 'Failed to fetch post');
     }
   }
 
@@ -49,7 +50,7 @@ export class BlogController {
       const categories = await blogService.getPublicCategories();
       res.json(categories);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch categories' });
+      sendError(res, error, 'Failed to fetch categories');
     }
   }
 
@@ -58,7 +59,7 @@ export class BlogController {
       const tags = await blogService.getPublicTags();
       res.json(tags);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch tags' });
+      sendError(res, error, 'Failed to fetch tags');
     }
   }
 
@@ -67,7 +68,7 @@ export class BlogController {
       const authors = await blogService.getPublicAuthors();
       res.json(authors);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch authors' });
+      sendError(res, error, 'Failed to fetch authors');
     }
   }
 
@@ -77,7 +78,7 @@ export class BlogController {
       const results = await blogService.searchInternalLinks(query);
       res.json(results);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to search internal links' });
+      sendError(res, error, 'Failed to search internal links');
     }
   }
 
@@ -94,7 +95,7 @@ export class BlogController {
       });
       res.json(result);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch admin posts' });
+      sendError(res, error, 'Failed to fetch admin posts');
     }
   }
 
@@ -104,7 +105,7 @@ export class BlogController {
       if (!post) return res.status(404).json({ error: 'Post not found' });
       res.json(post);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch post' });
+      sendError(res, error, 'Failed to fetch post');
     }
   }
 
@@ -113,7 +114,7 @@ export class BlogController {
       const post = await blogService.createPost(req.body, req.user?.email);
       res.status(201).json(post);
     } catch (error: any) {
-      res.status(400).json({ error: error.message || 'Failed to create post' });
+      sendError(res, error, 'Failed to create post', 400);
     }
   }
 
@@ -122,7 +123,7 @@ export class BlogController {
       const updated = await blogService.updatePost(req.params.id, req.body, req.user?.email);
       res.json(updated);
     } catch (error: any) {
-      res.status(400).json({ error: error.message || 'Failed to update post' });
+      sendError(res, error, 'Failed to update post', 400);
     }
   }
 
@@ -131,8 +132,8 @@ export class BlogController {
       const copy = await blogService.duplicatePost(req.params.id);
       res.status(201).json(copy);
     } catch (error: any) {
-      res.status(error.message.includes('not found') ? 404 : 500).json({
-        error: error.message || 'Failed to duplicate post',
+      res.status(error.message?.includes('not found') ? 404 : 500).json({
+        error: error.message?.includes('not found') ? 'المقال غير موجود' : 'Failed to duplicate post',
       });
     }
   }
@@ -142,7 +143,7 @@ export class BlogController {
       const post = await blogService.movePostToTrash(req.params.id);
       res.json({ success: true, post });
     } catch (error) {
-      res.status(500).json({ error: 'Failed to move to trash' });
+      sendError(res, error, 'Failed to move to trash');
     }
   }
 
@@ -151,7 +152,7 @@ export class BlogController {
       const post = await blogService.restorePostFromTrash(req.params.id);
       res.json({ success: true, post });
     } catch (error) {
-      res.status(500).json({ error: 'Failed to restore article' });
+      sendError(res, error, 'Failed to restore article');
     }
   }
 
@@ -173,7 +174,7 @@ export class BlogController {
       const result = await blogService.bulkActions(ids, action, value);
       res.json({ success: true, ...result });
     } catch (error: any) {
-      res.status(400).json({ error: error.message || 'Bulk action failed' });
+      sendError(res, error, 'Bulk action failed', 400);
     }
   }
 
@@ -183,7 +184,7 @@ export class BlogController {
       const categories = await blogService.getAdminCategories();
       res.json(categories);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch categories' });
+      sendError(res, error, 'Failed to fetch categories');
     }
   }
 
@@ -192,7 +193,7 @@ export class BlogController {
       const category = await blogService.createCategory(req.body);
       res.status(201).json(category);
     } catch (error: any) {
-      res.status(400).json({ error: error.message || 'Failed to create category' });
+      sendError(res, error, 'Failed to create category', 400);
     }
   }
 
@@ -201,7 +202,7 @@ export class BlogController {
       const category = await blogService.updateCategory(req.params.id, req.body);
       res.json(category);
     } catch (error: any) {
-      res.status(400).json({ error: error.message || 'Failed to update category' });
+      sendError(res, error, 'Failed to update category', 400);
     }
   }
 
@@ -221,7 +222,7 @@ export class BlogController {
       const tags = await blogService.getAdminTags(query);
       res.json(tags);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch tags' });
+      sendError(res, error, 'Failed to fetch tags');
     }
   }
 
@@ -230,7 +231,7 @@ export class BlogController {
       const tag = await blogService.createOrUpsertTag(req.body);
       res.status(201).json(tag);
     } catch (error: any) {
-      res.status(400).json({ error: error.message || 'Failed to create tag' });
+      sendError(res, error, 'Failed to create tag', 400);
     }
   }
 
@@ -249,7 +250,7 @@ export class BlogController {
       const authors = await blogService.getAdminAuthors();
       res.json(authors);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch authors' });
+      sendError(res, error, 'Failed to fetch authors');
     }
   }
 
@@ -258,7 +259,7 @@ export class BlogController {
       const author = await blogService.createAuthor(req.body);
       res.status(201).json(author);
     } catch (error: any) {
-      res.status(400).json({ error: error.message || 'Failed to create author' });
+      sendError(res, error, 'Failed to create author', 400);
     }
   }
 
@@ -267,7 +268,7 @@ export class BlogController {
       const author = await blogService.updateAuthor(req.params.id, req.body);
       res.json(author);
     } catch (error: any) {
-      res.status(400).json({ error: error.message || 'Failed to update author' });
+      sendError(res, error, 'Failed to update author', 400);
     }
   }
 

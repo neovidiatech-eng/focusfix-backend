@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { BookingStatus, Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
+import { HttpError } from '../../lib/errors';
 
 export interface CreateBookingDTO {
   name: string;
@@ -25,6 +26,19 @@ export interface CreateBookingDTO {
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+export const BOOKING_STATUSES = Object.values(BookingStatus);
+
+export const STATUS_LABELS: Record<BookingStatus, string> = {
+  pending: 'بانتظار التأكيد',
+  confirmed: 'مؤكد',
+  assigned: 'تم تعيين فني',
+  on_the_way: 'الفني في الطريق',
+  in_progress: 'جاري الإصلاح',
+  completed: 'مكتمل',
+  cancelled: 'ملغي',
+  no_show: 'العميل لم يحضر',
+};
+
 // Statuses that no longer occupy a slot
 const RELEASED_STATUSES: BookingStatus[] = ['cancelled', 'no_show'];
 
@@ -47,7 +61,7 @@ function cairoNow() {
 
 /**
  * Slots of an area on a given date with their remaining capacity.
- * Returns null when the area has no slots configured for that weekday (free-form booking).
+ * Returns null when the area has no schedule at all (free-form booking), [] when it is closed that day.
  */
 async function getSlotsWithCapacity(db: Db, areaId: string, date: string) {
   if (!DATE_RE.test(date)) throw new Error('date must be YYYY-MM-DD');
@@ -57,7 +71,12 @@ async function getSlotsWithCapacity(db: Db, areaId: string, date: string) {
     where: { area_id: areaId, is_active: true, day_of_week: day.getUTCDay() },
     orderBy: { start_time: 'asc' },
   });
-  if (slots.length === 0) return null;
+  if (slots.length === 0) {
+    // An area with a schedule but nothing on this weekday is closed that day;
+    // only areas with no schedule at all fall back to free-form booking.
+    const hasSchedule = await db.timeSlot.count({ where: { area_id: areaId } });
+    return hasSchedule > 0 ? [] : null;
+  }
 
   const slotIds = slots.map((s) => s.id);
   const [exceptions, counts] = await Promise.all([
@@ -306,25 +325,43 @@ export class BookingsService {
   async getAllAdminBookings(params: {
     status?: string;
     search?: string;
+    areaId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    dateField?: 'slot' | 'created';
     page?: number;
     limit?: number;
   }) {
-    const { status, search, page = 1, limit = 20 } = params;
+    const { status, search, areaId, dateFrom, dateTo, dateField = 'slot' } = params;
+    const page = Math.max(params.page || 1, 1);
+    const limit = Math.min(Math.max(params.limit || 20, 1), 1000);
 
-    const where: any = {};
+    const where: Prisma.BookingWhereInput = {};
     if (status && status !== 'all') {
-      where.status = status;
+      if (!BOOKING_STATUSES.includes(status as BookingStatus)) throw new HttpError(400, 'حالة غير صالحة');
+      where.status = status as BookingStatus;
+    }
+    if (areaId) where.area_id = areaId;
+    if (dateFrom || dateTo) {
+      const range: Prisma.DateTimeFilter = {};
+      if (dateFrom && DATE_RE.test(dateFrom)) range.gte = new Date(`${dateFrom}T00:00:00.000Z`);
+      if (dateTo && DATE_RE.test(dateTo)) {
+        range.lt = new Date(`${dateTo}T00:00:00.000Z`);
+        range.lt.setUTCDate(range.lt.getUTCDate() + 1);
+      }
+      if (dateField === 'created') where.created_at = range;
+      else where.slot_date = range;
     }
     if (search) {
-      const q = String(search);
+      const q = String(search).trim();
+      const digits = q.replace(/\D/g, '');
       where.OR = [
         { booking_number: { contains: q, mode: 'insensitive' } },
         { customer: { name: { contains: q, mode: 'insensitive' } } },
-        { customer: { phone: { contains: q } } },
+        { model: { name: { contains: q, mode: 'insensitive' } } },
+        ...(digits.length >= 4 ? [{ customer: { phone: { contains: digits.replace(/^0/, '') } } }] : []),
       ];
     }
-
-    const skip = (page - 1) * limit;
 
     const [bookings, total] = await Promise.all([
       prisma.booking.findMany({
@@ -336,7 +373,7 @@ export class BookingsService {
           services: { include: { service: true } },
         },
         orderBy: { created_at: 'desc' },
-        skip,
+        skip: (page - 1) * limit,
         take: limit,
       }),
       prisma.booking.count({ where }),
@@ -347,6 +384,7 @@ export class BookingsService {
       meta: {
         total,
         page,
+        limit,
         totalPages: Math.ceil(total / limit),
       },
     };
@@ -356,7 +394,7 @@ export class BookingsService {
     const booking = await prisma.booking.findUnique({
       where: { id },
       include: {
-        customer: true,
+        customer: { include: { _count: { select: { bookings: true } } } },
         model: { include: { type: true } },
         area: true,
         services: { include: { service: true } },
@@ -365,7 +403,7 @@ export class BookingsService {
     });
 
     if (!booking) {
-      throw new Error('Booking not found');
+      throw new HttpError(404, 'الحجز غير موجود');
     }
 
     return booking;
@@ -373,15 +411,18 @@ export class BookingsService {
 
   async updateBookingStatus(
     id: string,
-    data: { status: string; note?: string; totalFinal?: number },
+    data: { status: BookingStatus; note?: string; totalFinal?: number | null },
     adminEmail?: string
   ) {
     return prisma.$transaction(async (tx) => {
+      const existing = await tx.booking.findUnique({ where: { id } });
+      if (!existing) throw new HttpError(404, 'الحجز غير موجود');
+
       const b = await tx.booking.update({
         where: { id },
         data: {
-          status: data.status as BookingStatus,
-          total_final: data.totalFinal ? Number(data.totalFinal) : undefined,
+          status: data.status,
+          total_final: data.totalFinal === undefined ? undefined : data.totalFinal,
         },
       });
 
@@ -389,7 +430,7 @@ export class BookingsService {
         data: {
           booking_id: b.id,
           status: data.status,
-          note: data.note || `تغيرت حالة الحجز إلى: ${data.status}`,
+          note: data.note || `تغيرت حالة الحجز من ${STATUS_LABELS[existing.status]} إلى ${STATUS_LABELS[data.status]}`,
           created_by: adminEmail || 'admin',
         },
       });
@@ -398,10 +439,10 @@ export class BookingsService {
     });
   }
 
-  async updateBookingNotes(id: string, notes?: string) {
+  async updateBookingNotes(id: string, internalNotes: string | null, adminEmail?: string) {
     return prisma.booking.update({
       where: { id },
-      data: { notes },
+      data: { internal_notes: internalNotes },
     });
   }
 }
