@@ -9,7 +9,6 @@
  */
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
-import { triggerRevalidation } from '../src/lib/revalidate';
 
 // Device photos are cropped square (h = w); service photos keep their landscape ratio
 const u = (id: string, w = 600, square = true) => `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&q=75&w=${w}${square ? `&h=${w}` : ''}`;
@@ -147,8 +146,15 @@ export async function seedCatalog(prisma: PrismaClient) {
       }
     }
   }
-  // The seed writes straight to the DB, so tell the site to refresh its cached pages
-  await triggerRevalidation(['catalog', 'prices', 'services'], ['/', '/book', '/prices', '/services']).catch(() => {});
+  // The seed writes straight to the DB, so tell the site to refresh its cached pages.
+  // Inline (not src/lib/revalidate) because the production image ships prisma/ and dist/ only.
+  if (process.env.REVALIDATE_SECRET) {
+    await fetch(`${process.env.WEB_URL || 'https://focusfix-public.vercel.app'}/api/revalidate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-revalidate-secret': process.env.REVALIDATE_SECRET },
+      body: JSON.stringify({ tags: ['catalog', 'prices', 'services'], paths: ['/', '/book', '/prices', '/services'] }),
+    }).catch(() => {});
+  }
   return created;
 }
 
