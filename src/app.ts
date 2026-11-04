@@ -14,6 +14,7 @@ import blogRouter from './modules/blog/blog.routes';
 import settingsRouter from './modules/settings/settings.routes';
 import adminRouter from './modules/admin/admin.routes';
 import authRouter from './modules/auth/auth.routes';
+import mediaRouter, { UPLOAD_DIR } from './modules/media/media.routes';
 
 export function createApp(): Express {
   const app = express();
@@ -35,6 +36,16 @@ export function createApp(): Express {
         }
       },
       credentials: true,
+    })
+  );
+
+  // Uploaded images (catalog, blog). Cross-origin so the site and dashboard can embed them.
+  app.use(
+    '/uploads',
+    express.static(UPLOAD_DIR, {
+      maxAge: '365d',
+      immutable: true,
+      setHeaders: (res) => res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin'),
     })
   );
 
@@ -73,6 +84,7 @@ export function createApp(): Express {
   apiV1.use('/settings', settingsRouter);
   apiV1.use('/admin', adminRouter);
   apiV1.use('/auth', authRouter);
+  apiV1.use('/media', mediaRouter);
 
   app.use('/api/v1', apiV1);
 

@@ -61,6 +61,7 @@ export class CatalogService {
     series_en?: string;
     release_year?: number;
     order?: number;
+    image_url?: string | null;
   }) {
     if (!data.name?.trim() || !data.type_id) throw new HttpError(400, 'اسم الموديل ونوع الجهاز مطلوبان');
     const slug = slugify(data.slug || data.name);
@@ -74,6 +75,7 @@ export class CatalogService {
         series_en: data.series_en || null,
         release_year: data.release_year ? Number(data.release_year) : new Date().getFullYear(),
         order: data.order !== undefined ? Number(data.order) : 0,
+        image_url: data.image_url || null,
       },
     });
     triggerRevalidation(['catalog', 'prices']).catch(() => {});
@@ -91,11 +93,30 @@ export class CatalogService {
         ...(data.series_en !== undefined ? { series_en: data.series_en || null } : {}),
         ...(data.release_year ? { release_year: Number(data.release_year) } : {}),
         ...(data.order !== undefined ? { order: Number(data.order) } : {}),
+        ...(data.image_url !== undefined ? { image_url: data.image_url || null } : {}),
         ...(typeof data.is_active === 'boolean' ? { is_active: data.is_active } : {}),
       },
     });
     triggerRevalidation(['catalog', 'prices']).catch(() => {});
     return model;
+  }
+
+  /** Device types are seeded; the dashboard edits their image, intro and visibility */
+  async updateDeviceType(id: string, data: any) {
+    const type = await prisma.deviceType.update({
+      where: { id },
+      data: {
+        ...(data.name_ar ? { name_ar: String(data.name_ar).trim() } : {}),
+        ...(data.name_en ? { name_en: String(data.name_en).trim() } : {}),
+        ...(data.image_url !== undefined ? { image_url: data.image_url || null } : {}),
+        ...(data.intro_ar !== undefined ? { intro_ar: data.intro_ar || null } : {}),
+        ...(data.order !== undefined ? { order: Number(data.order) } : {}),
+        ...(typeof data.is_active === 'boolean' ? { is_active: data.is_active } : {}),
+        ...(typeof data.is_coming_soon === 'boolean' ? { is_coming_soon: data.is_coming_soon } : {}),
+      },
+    });
+    triggerRevalidation(['catalog', 'prices']).catch(() => {});
+    return type;
   }
 
   /** Models with bookings are deactivated (hidden from the site) instead of deleted */
@@ -117,6 +138,8 @@ export class CatalogService {
     name_en?: string;
     slug?: string;
     icon?: string;
+    image_url?: string | null;
+    description_ar?: string | null;
     estimated_minutes?: number;
     order?: number;
   }) {
@@ -129,6 +152,8 @@ export class CatalogService {
         name_en: data.name_en?.trim() || data.name_ar.trim(),
         slug,
         icon: data.icon || undefined,
+        image_url: data.image_url || null,
+        description_ar: data.description_ar || null,
         estimated_minutes: data.estimated_minutes ? Number(data.estimated_minutes) : 30,
         order: data.order !== undefined ? Number(data.order) : 0,
       },
@@ -145,6 +170,8 @@ export class CatalogService {
         ...(data.name_en ? { name_en: String(data.name_en).trim() } : {}),
         ...(data.slug ? { slug: slugify(data.slug) } : {}),
         ...(data.icon !== undefined ? { icon: data.icon || undefined } : {}),
+        ...(data.image_url !== undefined ? { image_url: data.image_url || null } : {}),
+        ...(data.description_ar !== undefined ? { description_ar: data.description_ar || null } : {}),
         ...(data.estimated_minutes ? { estimated_minutes: Number(data.estimated_minutes) } : {}),
         ...(data.order !== undefined ? { order: Number(data.order) } : {}),
         ...(typeof data.is_active === 'boolean' ? { is_active: data.is_active } : {}),

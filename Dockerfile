@@ -46,6 +46,9 @@ ENV NODE_ENV=production
 ENV PORT=4000
 
 # Create application user for security
+# Uploaded images live here (mounted as a named volume); must be writable by node
+RUN mkdir -p /app/uploads && chown node:node /app/uploads
+
 USER node
 
 # Copy package manifests

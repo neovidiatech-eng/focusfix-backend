@@ -53,6 +53,7 @@ export class PricingService {
         name: model.name,
         slug: model.slug,
         releaseYear: model.release_year,
+        imageUrl: model.image_url,
         cells,
       });
     });
@@ -68,6 +69,7 @@ export class PricingService {
         name_ar: deviceType.name_ar,
         name_en: deviceType.name_en,
         slug: deviceType.slug,
+        imageUrl: deviceType.image_url,
       },
       columns: services.map((s) => ({
         id: s.id,
@@ -75,6 +77,8 @@ export class PricingService {
         name_ar: s.name_ar,
         name_en: s.name_en,
         estimatedMinutes: s.estimated_minutes,
+        imageUrl: s.image_url,
+        description_ar: s.description_ar,
       })),
       series,
       updatedAt: new Date().toISOString(),

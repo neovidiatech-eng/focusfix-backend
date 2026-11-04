@@ -16,6 +16,7 @@ router.get('/services', (req, res) => catalogController.getServices(req, res));
 
 // Admin routes (Protected)
 router.get('/admin/all', requireAuth as any, (req, res) => catalogController.getAdminCatalog(req, res));
+router.put('/admin/device-types/:id', requireAuth as any, (req, res) => catalogController.updateDeviceType(req, res));
 router.post('/admin/models', requireAuth as any, (req, res) => catalogController.createModel(req, res));
 router.put('/admin/models/:id', requireAuth as any, (req, res) => catalogController.updateModel(req, res));
 router.delete('/admin/models/:id', requireAuth as any, (req, res) => catalogController.deleteModel(req, res));

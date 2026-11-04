@@ -21,3 +21,6 @@ dist
 # OS files
 .DS_Store
 Thumbs.db
+
+# Uploaded images (persist via a volume in production)
+uploads/

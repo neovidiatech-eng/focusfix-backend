@@ -91,6 +91,14 @@ export class CatalogController {
       sendError(res, error, 'Failed to update service');
     }
   }
+
+  async updateDeviceType(req: Request, res: Response) {
+    try {
+      res.json(await catalogService.updateDeviceType(req.params.id, req.body));
+    } catch (error) {
+      sendError(res, error, 'Failed to update device type');
+    }
+  }
 }
 
 export const catalogController = new CatalogController();

@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { seedCatalog } from './seed-catalog';
 
 const prisma = new PrismaClient();
 
@@ -242,6 +243,9 @@ async function main() {
       create: { key: s.key, value: s.value },
     });
   }
+
+  // Full model list, extra services and starter photos (keeps anything already set)
+  console.log('Catalog:', await seedCatalog(prisma));
 
   console.log('✅ FocusFix Seeding completed successfully!');
 }
