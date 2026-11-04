@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { BookingStatus } from '@prisma/client';
+import { BookingStatus, Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 
 export interface CreateBookingDTO {
@@ -23,21 +23,108 @@ export interface CreateBookingDTO {
   turnstileToken?: string;
 }
 
-export class BookingsService {
-  async getAvailability(areaId: string) {
-    const slots = await prisma.timeSlot.findMany({
-      where: { area_id: areaId, is_active: true },
-      orderBy: { start_time: 'asc' },
-    });
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+// Statuses that no longer occupy a slot
+const RELEASED_STATUSES: BookingStatus[] = ['cancelled', 'no_show'];
+
+type Db = Prisma.TransactionClient;
+
+/** Current date (YYYY-MM-DD) and time (HH:MM) in Cairo, where all slots are defined */
+function cairoNow() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Cairo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find((p) => p.type === type)?.value || '';
+  return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${get('hour')}:${get('minute')}` };
+}
+
+/**
+ * Slots of an area on a given date with their remaining capacity.
+ * Returns null when the area has no slots configured for that weekday (free-form booking).
+ */
+async function getSlotsWithCapacity(db: Db, areaId: string, date: string) {
+  if (!DATE_RE.test(date)) throw new Error('date must be YYYY-MM-DD');
+  const day = new Date(`${date}T00:00:00.000Z`);
+
+  const slots = await db.timeSlot.findMany({
+    where: { area_id: areaId, is_active: true, day_of_week: day.getUTCDay() },
+    orderBy: { start_time: 'asc' },
+  });
+  if (slots.length === 0) return null;
+
+  const slotIds = slots.map((s) => s.id);
+  const [exceptions, counts] = await Promise.all([
+    db.slotException.findMany({
+      where: { date: day, OR: [{ area_id: areaId, slot_id: null }, { slot_id: { in: slotIds } }] },
+    }),
+    db.booking.groupBy({
+      by: ['slot_id'],
+      where: { slot_id: { in: slotIds }, slot_date: day, status: { notIn: RELEASED_STATUSES } },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const areaException = exceptions.find((e) => !e.slot_id);
+  const now = cairoNow();
+
+  return slots.map((slot) => {
+    const exception = exceptions.find((e) => e.slot_id === slot.id) || areaException;
+    const capacity = exception?.is_closed ? 0 : exception?.max_override ?? slot.max_bookings;
+    const booked = counts.find((c) => c.slot_id === slot.id)?._count._all || 0;
+    const remaining = Math.max(capacity - booked, 0);
+    const started = date === now.date && slot.start_time <= now.time;
+    return {
+      id: slot.id,
+      startTime: slot.start_time,
+      endTime: slot.end_time,
+      capacity,
+      remaining,
+      available: remaining > 0 && !started,
+    };
+  });
+}
+
+export class BookingsService {
+  async getAvailability(areaId: string, date?: string) {
+    if (!date) {
+      const slots = await prisma.timeSlot.findMany({
+        where: { area_id: areaId, is_active: true },
+        orderBy: { start_time: 'asc' },
+      });
+
+      return {
+        areaId,
+        slots: slots.map((s) => ({
+          id: s.id,
+          dayOfWeek: s.day_of_week,
+          startTime: s.start_time,
+          endTime: s.end_time,
+          label: `${s.start_time} - ${s.end_time}`,
+          maxBookings: s.max_bookings,
+        })),
+      };
+    }
+
+    const slots = await getSlotsWithCapacity(prisma, areaId, date);
     return {
       areaId,
-      slots: slots.map((s) => ({
+      date,
+      configured: slots !== null,
+      slots: (slots || []).map((s) => ({
         id: s.id,
-        startTime: s.start_time,
-        endTime: s.end_time,
-        label: `${s.start_time} - ${s.end_time}`,
-        maxBookings: s.max_bookings,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        label: `${s.startTime} - ${s.endTime}`,
+        maxBookings: s.capacity,
+        remaining: s.remaining,
+        available: s.available,
       })),
     };
   }
@@ -59,6 +146,24 @@ export class BookingsService {
       const area = await tx.area.findUnique({ where: { id: data.areaId } });
       if (!area || !area.is_active) throw new Error('Selected area is invalid');
 
+      if (!DATE_RE.test(data.slotDate) || data.slotDate < cairoNow().date) {
+        throw new Error('تاريخ الحجز غير صالح');
+      }
+
+      // Capacity check: lock the slot row so concurrent bookings for the same slot are serialized
+      let slotLabel = data.slotLabel;
+      if (data.slotId) {
+        await tx.$queryRaw`SELECT id FROM time_slots WHERE id = ${data.slotId} FOR UPDATE`;
+        const slots = await getSlotsWithCapacity(tx, data.areaId, data.slotDate);
+        const slot = slots?.find((s) => s.id === data.slotId);
+        if (!slot) throw new Error('الموعد المختار غير متاح لهذه المنطقة');
+        if (!slot.available) throw new Error('الموعد المختار ممتلئ أو غير متاح، يرجى اختيار موعد آخر');
+        slotLabel = data.slotLabel || `${slot.startTime} - ${slot.endTime}`;
+      } else {
+        const slots = await getSlotsWithCapacity(tx, data.areaId, data.slotDate);
+        if (slots !== null) throw new Error('يرجى اختيار موعد متاح');
+      }
+
       const prices = await tx.price.findMany({
         where: {
           model_id: data.modelId,
@@ -67,6 +172,11 @@ export class BookingsService {
         },
         include: { service: true },
       });
+
+      const requestedServiceIds = new Set(data.serviceIds);
+      if (prices.length !== requestedServiceIds.size) {
+        throw new Error('بعض الخدمات المختارة غير متاحة لهذا الجهاز');
+      }
 
       let servicesTotal = 0;
       const serviceSnapshots = prices.map((p) => {
@@ -110,7 +220,7 @@ export class BookingsService {
           area_id: data.areaId,
           slot_id: data.slotId,
           slot_date: new Date(data.slotDate),
-          slot_label_snapshot: data.slotLabel,
+          slot_label_snapshot: slotLabel,
           address: data.address,
           property_type: data.propertyType || 'home',
           location_lat: data.locationLat,

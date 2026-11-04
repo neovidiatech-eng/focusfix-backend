@@ -13,7 +13,7 @@ export const createBookingSchema = z.object({
   serviceIds: z.array(z.string().uuid()).min(1),
   areaId: z.string().uuid(),
   slotId: z.string().uuid().optional(),
-  slotDate: z.string(), // YYYY-MM-DD
+  slotDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // YYYY-MM-DD
   slotLabel: z.string(),
   address: z.string().min(5),
   propertyType: z.string().optional(),
@@ -28,15 +28,16 @@ export const createBookingSchema = z.object({
 export class BookingsController {
   async getAvailability(req: Request, res: Response) {
     try {
-      const { area_id } = req.query;
+      const { area_id, date } = req.query;
       if (!area_id) {
         return res.status(400).json({ error: 'area_id is required' });
       }
 
-      const availability = await bookingsService.getAvailability(String(area_id));
+      const availability = await bookingsService.getAvailability(String(area_id), date ? String(date) : undefined);
       res.json(availability);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch availability' });
+    } catch (error: any) {
+      const status = error.message?.includes('YYYY-MM-DD') ? 400 : 500;
+      res.status(status).json({ error: status === 400 ? error.message : 'Failed to fetch availability' });
     }
   }
 

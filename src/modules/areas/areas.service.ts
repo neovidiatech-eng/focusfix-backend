@@ -1,6 +1,13 @@
 import { prisma } from '../../lib/prisma';
 import { triggerRevalidation } from '../../lib/revalidate';
 
+// Default weekly schedule for new areas (same as the seed): 3 slots a day, 3 bookings each
+const DEFAULT_SLOT_TIMES = [
+  { start: '10:00', end: '13:00' },
+  { start: '13:00', end: '16:00' },
+  { start: '16:00', end: '19:00' },
+];
+
 export class AreasService {
   async getActiveAreas() {
     return prisma.area.findMany({
@@ -36,6 +43,11 @@ export class AreasService {
         slug: data.slug,
         city_ar: data.city_ar || 'القاهرة',
         transport_fee: Number(data.transport_fee || 0),
+        time_slots: {
+          create: [0, 1, 2, 3, 4, 5, 6].flatMap((day) =>
+            DEFAULT_SLOT_TIMES.map((t) => ({ day_of_week: day, start_time: t.start, end_time: t.end, max_bookings: 3 }))
+          ),
+        },
       },
     });
 
@@ -67,7 +79,12 @@ export class AreasService {
   }
 
   async deleteArea(id: string) {
-    const area = await prisma.area.delete({ where: { id } });
+    // Slots and exceptions belong to the area; bookings still block deletion via their FK
+    const area = await prisma.$transaction(async (tx) => {
+      await tx.slotException.deleteMany({ where: { OR: [{ area_id: id }, { slot: { area_id: id } }] } });
+      await tx.timeSlot.deleteMany({ where: { area_id: id } });
+      return tx.area.delete({ where: { id } });
+    });
     triggerRevalidation(['areas', 'prices']).catch(() => {});
     return area;
   }
