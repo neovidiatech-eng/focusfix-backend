@@ -7,7 +7,7 @@ export interface CreateBookingDTO {
   name: string;
   phone: string;
   whatsappNumber?: string;
-  email: string;
+  email?: string;
   modelId: string;
   serviceIds: string[];
   areaId: string;
@@ -136,6 +136,8 @@ export class BookingsService {
       areaId,
       date,
       configured: slots !== null,
+      // Every period closed by the admin for this day (holiday / day off)
+      closed: slots !== null && slots.every((s) => s.capacity === 0),
       slots: (slots || []).map((s) => ({
         id: s.id,
         startTime: s.startTime,
@@ -146,6 +148,25 @@ export class BookingsService {
         available: s.available,
       })),
     };
+  }
+
+  /** Per-day summary for the booking calendar strip: which upcoming days are open / full / closed */
+  async getAvailabilityDays(areaId: string, from: string, days: number) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) throw new Error('from must be YYYY-MM-DD');
+    const count = Math.min(Math.max(days, 1), 31);
+    const start = new Date(`${from}T00:00:00.000Z`);
+    const result = [];
+    for (let i = 0; i < count; i++) {
+      const date = new Date(start.getTime() + i * 864e5).toISOString().slice(0, 10);
+      const slots = await getSlotsWithCapacity(prisma, areaId, date);
+      if (slots === null) {
+        result.push({ date, configured: false, closed: false, remaining: null });
+        continue;
+      }
+      const remaining = slots.filter((s) => s.available).reduce((sum, s) => sum + s.remaining, 0);
+      result.push({ date, configured: true, closed: slots.every((s) => s.capacity === 0), remaining });
+    }
+    return result;
   }
 
   async checkExistingIdempotency(idempotencyKey?: string) {
@@ -218,8 +239,9 @@ export class BookingsService {
 
       const customer = await tx.customer.upsert({
         where: { phone: cleanPhone },
-        update: { name: data.name, email: data.email },
-        create: { phone: cleanPhone, name: data.name, email: data.email },
+        // Keep a previously saved email when the customer leaves it empty this time
+        update: { name: data.name, ...(data.email ? { email: data.email } : {}) },
+        create: { phone: cleanPhone, name: data.name, email: data.email || null },
       });
 
       const currentYear = new Date().getFullYear();

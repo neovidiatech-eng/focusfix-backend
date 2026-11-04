@@ -90,9 +90,10 @@ export class PricingService {
       throw new Error('Device type not found');
     }
 
-    const services = await prisma.service.findMany({ orderBy: { order: 'asc' } });
+    // Deactivated models/services live in the catalog page; keep the matrix to what customers can book
+    const services = await prisma.service.findMany({ where: { is_active: true }, orderBy: { order: 'asc' } });
     const models = await prisma.deviceModel.findMany({
-      where: { type_id: deviceType.id },
+      where: { type_id: deviceType.id, is_active: true },
       include: { prices: true },
       orderBy: { order: 'asc' },
     });

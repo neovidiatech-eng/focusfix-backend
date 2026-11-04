@@ -11,7 +11,8 @@ export const createBookingSchema = z.object({
   name: z.string().min(2),
   phone: z.string().regex(/^(\+20|0)?1[0125][0-9]{8}$/),
   whatsappNumber: z.string().optional(),
-  email: z.string().email(),
+  // Optional: phone is enough to confirm; email only adds the confirmation mail
+  email: z.preprocess((v) => (v === '' ? undefined : v), z.string().email().optional()),
   modelId: z.string().uuid(),
   serviceIds: z.array(z.string().uuid()).min(1),
   areaId: z.string().uuid(),
@@ -42,10 +43,14 @@ export class BookingsController {
         return res.status(400).json({ error: 'area_id is required' });
       }
 
+      if (req.query.from) {
+        return res.json(await bookingsService.getAvailabilityDays(String(area_id), String(req.query.from), Number(req.query.days) || 7));
+      }
+
       const availability = await bookingsService.getAvailability(String(area_id), date ? String(date) : undefined);
       res.json(availability);
     } catch (error: any) {
-      const status = error.message?.includes('YYYY-MM-DD') ? 400 : 500;
+      const status = error.message?.includes('YYYY-MM-DD') || error.message?.includes('Invalid area') ? 400 : 500;
       res.status(status).json({ error: status === 400 ? error.message : 'Failed to fetch availability' });
     }
   }

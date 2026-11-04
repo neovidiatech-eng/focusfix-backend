@@ -230,7 +230,7 @@ model Customer {
   id         String    @id @default(uuid())
   phone      String    @unique // E.164 (+201...)
   name       String
-  email      String
+  email      String?
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
 
