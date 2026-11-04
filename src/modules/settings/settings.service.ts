@@ -12,6 +12,7 @@ export class SettingsService {
     working_hours_start: '10:00',
     working_hours_end: '18:00',
     slot_capacity: '3',
+    booking_days_ahead: '7',
     banner_enabled: 'true',
     banner_text: 'خصم حصري 15% على صيانة أجهزة آيفون اليوم + فحص فوري وقطع غيار أصلية بضمان عام كامل',
     banner_text_en: 'Exclusive 15% OFF iPhone repairs today + instant inspection & genuine parts with 1-Year warranty',
@@ -21,8 +22,11 @@ export class SettingsService {
     banner_bg_color: 'from-amber-500 via-amber-400 to-amber-500',
   };
 
+  // Staff-only settings that must never reach the public website
+  private privateKeys = new Set(['admin_alert_emails']);
+
   async getPublicSettings(): Promise<Record<string, string>> {
-    const settings = await prisma.setting.findMany();
+    const settings = (await prisma.setting.findMany()).filter((s) => !this.privateKeys.has(s.key));
     const settingsMap = { ...this.defaultSettings };
     settings.forEach((s) => {
       settingsMap[s.key] = s.value;

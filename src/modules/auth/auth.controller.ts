@@ -1,3 +1,4 @@
+import { sendError } from '../../lib/errors';
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { authService } from './auth.service';
@@ -7,6 +8,11 @@ const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
 });
+
+function readCookie(header: string | undefined, name: string): string | undefined {
+  const match = header?.split(';').map((c) => c.trim()).find((c) => c.startsWith(`${name}=`));
+  return match ? decodeURIComponent(match.slice(name.length + 1)) : undefined;
+}
 
 export class AuthController {
   async login(req: Request, res: Response) {
@@ -35,7 +41,7 @@ export class AuthController {
   }
 
   refresh(req: Request, res: Response) {
-    const token = req.cookies?.refreshToken || req.body?.refreshToken;
+    const token = readCookie(req.headers.cookie, 'refreshToken') || req.body?.refreshToken;
     if (!token) {
       return res.status(401).json({ error: 'Refresh token is required' });
     }
@@ -60,7 +66,7 @@ export class AuthController {
       const user = await authService.getMe(req.user.id);
       res.json(user);
     } catch (error: any) {
-      res.status(404).json({ error: error.message || 'User not found' });
+      sendError(res, error, 'User not found', 404);
     }
   }
 }

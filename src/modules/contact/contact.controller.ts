@@ -1,3 +1,4 @@
+import { sendError } from '../../lib/errors';
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { contactService } from './contact.service';
@@ -26,7 +27,7 @@ export class ContactController {
       const msg = await contactService.createMessage(data);
       res.status(201).json({ success: true, id: msg.id });
     } catch (error: any) {
-      res.status(400).json({ error: error.message || 'Invalid contact payload' });
+      sendError(res, error, 'Invalid contact payload', 400);
     }
   }
 
@@ -36,7 +37,7 @@ export class ContactController {
       const quote = await contactService.createQuote(data);
       res.status(201).json({ success: true, id: quote.id });
     } catch (error: any) {
-      res.status(400).json({ error: error.message || 'Invalid quote payload' });
+      sendError(res, error, 'Invalid quote payload', 400);
     }
   }
 
@@ -45,7 +46,7 @@ export class ContactController {
       const messages = await contactService.getMessages();
       res.json(messages);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch contact messages' });
+      sendError(res, error, 'Failed to fetch contact messages');
     }
   }
 
@@ -54,7 +55,7 @@ export class ContactController {
       const quotes = await contactService.getQuotes();
       res.json(quotes);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch quotes' });
+      sendError(res, error, 'Failed to fetch quotes');
     }
   }
 
@@ -64,7 +65,7 @@ export class ContactController {
       const msg = await contactService.updateMessageStatus(req.params.id, status);
       res.json(msg);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to update message status' });
+      sendError(res, error, 'Failed to update message status');
     }
   }
 }

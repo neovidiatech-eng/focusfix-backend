@@ -1,14 +1,18 @@
+import { sendError } from '../../lib/errors';
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { bookingsService } from './bookings.service';
+import { BookingStatus } from '@prisma/client';
+import { bookingsService, BOOKING_STATUSES } from './bookings.service';
 import { AuthenticatedRequest } from '../auth/auth.middleware';
 import { logger } from '../../lib/logger';
+import { notifyNewBooking } from '../../lib/notify';
 
 export const createBookingSchema = z.object({
   name: z.string().min(2),
   phone: z.string().regex(/^(\+20|0)?1[0125][0-9]{8}$/),
   whatsappNumber: z.string().optional(),
-  email: z.string().email(),
+  // Optional: phone is enough to confirm; email only adds the confirmation mail
+  email: z.preprocess((v) => (v === '' ? undefined : v), z.string().email().optional()),
   modelId: z.string().uuid(),
   serviceIds: z.array(z.string().uuid()).min(1),
   areaId: z.string().uuid(),
@@ -25,6 +29,12 @@ export const createBookingSchema = z.object({
   turnstileToken: z.string().optional(),
 });
 
+const updateStatusSchema = z.object({
+  status: z.enum(BOOKING_STATUSES as [BookingStatus, ...BookingStatus[]]),
+  note: z.string().max(1000).optional(),
+  totalFinal: z.number().nonnegative().nullable().optional(),
+});
+
 export class BookingsController {
   async getAvailability(req: Request, res: Response) {
     try {
@@ -33,10 +43,14 @@ export class BookingsController {
         return res.status(400).json({ error: 'area_id is required' });
       }
 
+      if (req.query.from) {
+        return res.json(await bookingsService.getAvailabilityDays(String(area_id), String(req.query.from), Number(req.query.days) || 7));
+      }
+
       const availability = await bookingsService.getAvailability(String(area_id), date ? String(date) : undefined);
       res.json(availability);
     } catch (error: any) {
-      const status = error.message?.includes('YYYY-MM-DD') ? 400 : 500;
+      const status = error.message?.includes('YYYY-MM-DD') || error.message?.includes('Invalid area') ? 400 : 500;
       res.status(status).json({ error: status === 400 ? error.message : 'Failed to fetch availability' });
     }
   }
@@ -58,6 +72,7 @@ export class BookingsController {
 
       const validated = createBookingSchema.parse(req.body);
       const result = await bookingsService.createBooking(validated as any, idempotencyKey);
+      notifyNewBooking(result.newBooking.id).catch(() => {});
 
       res.status(201).json({
         bookingNumber: result.bookingNumber,
@@ -68,7 +83,7 @@ export class BookingsController {
       });
     } catch (error: any) {
       logger.error({ error }, 'Error creating booking');
-      res.status(400).json({ error: error.message || 'Failed to submit booking' });
+      sendError(res, error, 'Failed to submit booking', 400);
     }
   }
 
@@ -77,8 +92,7 @@ export class BookingsController {
       const details = await bookingsService.getConfirmation(req.params.token);
       res.json(details);
     } catch (error: any) {
-      const status = error.message.includes('not found') ? 404 : 500;
-      res.status(status).json({ error: error.message || 'Failed to fetch confirmation details' });
+      sendError(res, error, 'Failed to fetch confirmation details', 404);
     }
   }
 
@@ -89,22 +103,27 @@ export class BookingsController {
       if (!bookingNumber || !phone) return res.status(400).json({ error: 'code and phone are required' });
       res.json(await bookingsService.trackBooking(bookingNumber, phone));
     } catch (error: any) {
-      res.status(404).json({ error: error.message || 'Booking not found' });
+      sendError(res, error, 'Booking not found', 404);
     }
   }
 
   async getAllAdminBookings(req: Request, res: Response) {
     try {
-      const { status, search, page = '1', limit = '20' } = req.query;
+      const q = req.query;
+      const str = (v: unknown) => (v ? String(v) : undefined);
       const result = await bookingsService.getAllAdminBookings({
-        status: status ? String(status) : undefined,
-        search: search ? String(search) : undefined,
-        page: parseInt(String(page), 10),
-        limit: parseInt(String(limit), 10),
+        status: str(q.status),
+        search: str(q.search),
+        areaId: str(q.area_id),
+        dateFrom: str(q.date_from),
+        dateTo: str(q.date_to),
+        dateField: q.date_field === 'created' ? 'created' : 'slot',
+        page: parseInt(String(q.page || '1'), 10) || 1,
+        limit: parseInt(String(q.limit || '20'), 10) || 20,
       });
       res.json(result);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch admin bookings' });
+      sendError(res, error, 'Failed to fetch admin bookings');
     }
   }
 
@@ -113,31 +132,27 @@ export class BookingsController {
       const booking = await bookingsService.getAdminBookingById(req.params.id);
       res.json(booking);
     } catch (error: any) {
-      res.status(404).json({ error: error.message || 'Booking not found' });
+      sendError(res, error, 'Booking not found', 404);
     }
   }
 
   async updateBookingStatus(req: AuthenticatedRequest, res: Response) {
     try {
-      const { status, note, totalFinal } = req.body;
-      const updated = await bookingsService.updateBookingStatus(
-        req.params.id,
-        { status, note, totalFinal },
-        req.user?.email
-      );
+      const data = updateStatusSchema.parse(req.body);
+      const updated = await bookingsService.updateBookingStatus(req.params.id, data, req.user?.email);
       res.json({ success: true, booking: updated });
     } catch (error: any) {
-      res.status(400).json({ error: error.message || 'Failed to update booking status' });
+      sendError(res, error, 'Failed to update booking status', 400);
     }
   }
 
-  async updateBookingNotes(req: Request, res: Response) {
+  async updateBookingNotes(req: AuthenticatedRequest, res: Response) {
     try {
-      const { notes } = req.body;
-      const b = await bookingsService.updateBookingNotes(req.params.id, notes);
-      res.json({ success: true, notes: b.notes });
+      const { notes } = z.object({ notes: z.string().max(5000).nullable().optional() }).parse(req.body);
+      const b = await bookingsService.updateBookingNotes(req.params.id, notes?.trim() || null, req.user?.email);
+      res.json({ success: true, internalNotes: b.internal_notes });
     } catch (error) {
-      res.status(500).json({ error: 'Failed to update notes' });
+      sendError(res, error, 'Failed to update notes');
     }
   }
 }

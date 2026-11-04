@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { seedCatalog } from './seed-catalog';
 
 const prisma = new PrismaClient();
 
@@ -203,7 +204,9 @@ async function main() {
       { start: '16:00', end: '19:00' },
     ];
 
-    for (let day = 0; day <= 6; day++) {
+    // Only seed a schedule for areas that have none, so re-running the seed is safe
+    const existingSlots = await prisma.timeSlot.count({ where: { area_id: area.id } });
+    for (let day = 0; existingSlots === 0 && day <= 6; day++) {
       for (const st of slotTimes) {
         await prisma.timeSlot.create({
           data: {
@@ -240,6 +243,9 @@ async function main() {
       create: { key: s.key, value: s.value },
     });
   }
+
+  // Full model list, extra services and starter photos (keeps anything already set)
+  console.log('Catalog:', await seedCatalog(prisma));
 
   console.log('✅ FocusFix Seeding completed successfully!');
 }

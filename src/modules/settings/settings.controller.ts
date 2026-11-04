@@ -1,3 +1,4 @@
+import { sendError } from '../../lib/errors';
 import { Request, Response } from 'express';
 import { settingsService } from './settings.service';
 
@@ -7,7 +8,7 @@ export class SettingsController {
       const settingsMap = await settingsService.getPublicSettings();
       res.json(settingsMap);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch public settings' });
+      sendError(res, error, 'Failed to fetch public settings');
     }
   }
 
@@ -16,7 +17,7 @@ export class SettingsController {
       const settings = await settingsService.getAllSettings();
       res.json(settings);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch settings' });
+      sendError(res, error, 'Failed to fetch settings');
     }
   }
 
@@ -30,7 +31,7 @@ export class SettingsController {
       const result = await settingsService.bulkUpdateSettings(settings);
       res.json(result);
     } catch (error: any) {
-      res.status(400).json({ error: error.message || 'Failed to update settings' });
+      sendError(res, error, 'Failed to update settings', 400);
     }
   }
 }

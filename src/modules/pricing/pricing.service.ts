@@ -53,6 +53,7 @@ export class PricingService {
         name: model.name,
         slug: model.slug,
         releaseYear: model.release_year,
+        imageUrl: model.image_url,
         cells,
       });
     });
@@ -68,6 +69,7 @@ export class PricingService {
         name_ar: deviceType.name_ar,
         name_en: deviceType.name_en,
         slug: deviceType.slug,
+        imageUrl: deviceType.image_url,
       },
       columns: services.map((s) => ({
         id: s.id,
@@ -75,6 +77,8 @@ export class PricingService {
         name_ar: s.name_ar,
         name_en: s.name_en,
         estimatedMinutes: s.estimated_minutes,
+        imageUrl: s.image_url,
+        description_ar: s.description_ar,
       })),
       series,
       updatedAt: new Date().toISOString(),
@@ -90,9 +94,10 @@ export class PricingService {
       throw new Error('Device type not found');
     }
 
-    const services = await prisma.service.findMany({ orderBy: { order: 'asc' } });
+    // Deactivated models/services live in the catalog page; keep the matrix to what customers can book
+    const services = await prisma.service.findMany({ where: { is_active: true }, orderBy: { order: 'asc' } });
     const models = await prisma.deviceModel.findMany({
-      where: { type_id: deviceType.id },
+      where: { type_id: deviceType.id, is_active: true },
       include: { prices: true },
       orderBy: { order: 'asc' },
     });
@@ -152,7 +157,8 @@ export class PricingService {
           },
         });
 
-        if (existing && existing.price !== item.price) {
+        const oldPrice = existing?.price == null ? null : Number(existing.price);
+        if (existing && oldPrice !== (item.price ?? null)) {
           await tx.priceHistory.create({
             data: {
               price_id: updated.id,
@@ -233,6 +239,11 @@ export class PricingService {
           newPrice: row.price,
         });
         if (!dryRun) {
+          if (Number(existing.price) !== Number(row.price)) {
+            await prisma.priceHistory.create({
+              data: { price_id: existing.id, old_price: existing.price, new_price: row.price, changed_by: 'excel_import' },
+            });
+          }
           await prisma.price.update({
             where: { id: existing.id },
             data: {

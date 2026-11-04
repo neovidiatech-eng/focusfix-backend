@@ -2,6 +2,22 @@ import { prisma } from '../../lib/prisma';
 import { PostStatus } from '@prisma/client';
 import { triggerRevalidation } from '../../lib/revalidate';
 
+let lastScheduledCheck = 0;
+
+/**
+ * Publishes scheduled posts whose time has come. There is no job queue, so this
+ * runs lazily (at most once a minute) whenever posts are read.
+ */
+async function publishDueScheduledPosts() {
+  if (Date.now() - lastScheduledCheck < 60_000) return;
+  lastScheduledCheck = Date.now();
+  const published = await prisma.$executeRaw`
+    UPDATE blog_posts
+    SET status = 'published', published_at = COALESCE(published_at, scheduled_at), updated_at = NOW()
+    WHERE status = 'scheduled' AND scheduled_at IS NOT NULL AND scheduled_at <= NOW()`;
+  if (published > 0) triggerRevalidation(['blog', 'blog-posts']).catch(() => {});
+}
+
 export class BlogService {
   // 1. PUBLIC POSTS
   async getPublicPosts(params: {
@@ -12,8 +28,9 @@ export class BlogService {
     page?: number;
     limit?: number;
   }) {
+    await publishDueScheduledPosts();
     const pageNum = Math.max(1, params.page || 1);
-    const take = Math.min(50, Math.max(1, params.limit || 10));
+    const take = Math.min(200, Math.max(1, params.limit || 10));
     const skip = (pageNum - 1) * take;
 
     const where: Record<string, unknown> = {
@@ -99,6 +116,7 @@ export class BlogService {
   }
 
   async getPublicPostBySlug(slug: string) {
+    await publishDueScheduledPosts();
     const post = await prisma.blogPost.findUnique({
       where: { slug },
       include: {
@@ -207,7 +225,7 @@ export class BlogService {
 
     const staticPages = [
       { title: 'الرئيسية (Home)', url: '/', type: 'page' },
-      { title: 'حجز موعد صيانة (Book Repair)', url: '/booking', type: 'page' },
+      { title: 'حجز موعد صيانة (Book Repair)', url: '/book', type: 'page' },
       { title: 'أسعار الصيانة (Pricing)', url: '/pricing', type: 'page' },
       { title: 'الموديلات المدعومة (Devices Catalog)', url: '/catalog', type: 'page' },
       { title: 'المناطق المغطاة (Coverage Areas)', url: '/areas', type: 'page' },
@@ -278,6 +296,7 @@ export class BlogService {
     search?: string;
     date?: string;
   }) {
+    await publishDueScheduledPosts();
     const where: Record<string, unknown> = {};
 
     if (params.status && params.status !== 'all') {

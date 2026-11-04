@@ -65,6 +65,7 @@ model DeviceType {
   seo_h1_en      String?
   intro_ar       String?
   intro_en       String?
+  image_url      String?
   seo_title      String?
   seo_desc       String?
   created_at     DateTime      @default(now())
@@ -105,6 +106,8 @@ model Service {
   name_ar               String
   name_en               String
   icon                  String?
+  image_url             String?
+  description_ar        String?
   estimated_minutes     Int       @default(30)
   default_warranty_days Int       @default(180)
   order                 Int       @default(0)
@@ -230,7 +233,7 @@ model Customer {
   id         String    @id @default(uuid())
   phone      String    @unique // E.164 (+201...)
   name       String
-  email      String
+  email      String?
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
 
@@ -260,7 +263,8 @@ model Booking {
   status                 BookingStatus    @default(pending)
   locale                 String           @default("ar")
   whatsapp_number        String?
-  notes                  String?
+  notes                  String?          // customer notes from the booking form
+  internal_notes         String?          // staff-only notes from the dashboard
   source                 String           @default("web") // "web" | "manual"
   attribution            Json?
   idempotency_key        String?          @unique
@@ -281,6 +285,7 @@ model Booking {
   @@index([booking_number])
   @@index([status])
   @@index([created_at])
+  @@index([slot_date])
   @@map("bookings")
 }
 
