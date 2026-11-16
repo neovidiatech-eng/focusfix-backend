@@ -34,6 +34,22 @@ export class SettingsController {
       sendError(res, error, 'Failed to update settings', 400);
     }
   }
+
+  async getCodes(req: Request, res: Response) {
+    try {
+      res.json(await settingsService.getCodes());
+    } catch (error) {
+      sendError(res, error, 'Failed to load tracking codes');
+    }
+  }
+
+  async updateCodes(req: Request, res: Response) {
+    try {
+      res.json(await settingsService.updateCodes(req.body || {}, (req as any).user, req.ip));
+    } catch (error) {
+      sendError(res, error, 'Failed to save tracking codes');
+    }
+  }
 }
 
 export const settingsController = new SettingsController();

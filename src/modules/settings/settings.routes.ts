@@ -13,4 +13,8 @@ router.get('/admin', requireAuth, (req, res) => settingsController.getAdminSetti
 // ADMIN: PUT /api/v1/settings/admin (Bulk update)
 router.put('/admin', requireAuth, (req, res) => settingsController.updateAdminSettings(req, res));
 
+// ADMIN: header / body / footer tracking code (GTM, Meta, TikTok, Google Ads…)
+router.get('/admin/codes', requireAuth, (req, res) => settingsController.getCodes(req, res));
+router.put('/admin/codes', requireAuth, (req, res) => settingsController.updateCodes(req, res));
+
 export default router;
