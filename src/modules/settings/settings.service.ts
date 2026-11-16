@@ -1,5 +1,23 @@
 import { prisma } from '../../lib/prisma';
 import { triggerRevalidation } from '../../lib/revalidate';
+import { HttpError } from '../../lib/errors';
+
+// Custom tracking code injected into every page of the site (like WordPress "Insert Headers and Footers")
+export const CODE_KEYS = { head: 'code_head', body: 'code_body_open', footer: 'code_footer' } as const;
+const CODE_MAX_LENGTH = 50_000;
+
+// The Google Tag Manager container the site shipped with, now editable from the dashboard
+const DEFAULT_CODE_HEAD = `<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','GTM-5VTRPS8J');</script>
+<!-- End Google Tag Manager -->`;
+const DEFAULT_CODE_BODY = `<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-5VTRPS8J"
+height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->`;
 
 export class SettingsService {
   private defaultSettings: Record<string, string> = {
@@ -20,6 +38,9 @@ export class SettingsService {
     banner_badge_en: 'Emergency 24/7 Service Available',
     banner_link: '/book',
     banner_bg_color: 'from-amber-500 via-amber-400 to-amber-500',
+    [CODE_KEYS.head]: DEFAULT_CODE_HEAD,
+    [CODE_KEYS.body]: DEFAULT_CODE_BODY,
+    [CODE_KEYS.footer]: '',
   };
 
   // Staff-only settings that must never reach the public website
@@ -36,6 +57,30 @@ export class SettingsService {
 
   async getAllSettings() {
     return prisma.setting.findMany();
+  }
+
+  async getCodes() {
+    const rows = await prisma.setting.findMany({ where: { key: { in: Object.values(CODE_KEYS) } } });
+    const value = (key: string) => rows.find((r) => r.key === key)?.value ?? this.defaultSettings[key];
+    return { head: value(CODE_KEYS.head), body: value(CODE_KEYS.body), footer: value(CODE_KEYS.footer) };
+  }
+
+  async updateCodes(data: { head?: unknown; body?: unknown; footer?: unknown }, user?: { id: string }, ip?: string) {
+    const entries = (Object.keys(CODE_KEYS) as Array<keyof typeof CODE_KEYS>)
+      .filter((k) => data[k] !== undefined)
+      .map((k) => {
+        if (typeof data[k] !== 'string') throw new HttpError(400, 'الكود لازم يكون نص');
+        if ((data[k] as string).length > CODE_MAX_LENGTH) throw new HttpError(400, `الكود أطول من ${CODE_MAX_LENGTH.toLocaleString('en-US')} حرف`);
+        return { key: CODE_KEYS[k], value: (data[k] as string).trim() };
+      });
+    for (const { key, value } of entries) {
+      await prisma.setting.upsert({ where: { key }, update: { value }, create: { key, value } });
+    }
+    await prisma.auditLog.create({
+      data: { action: 'tracking_codes_update', details: `Updated ${entries.map((e) => e.key).join(', ')}`, user_id: user?.id, ip_address: ip },
+    });
+    triggerRevalidation(['settings'], ['/']).catch(() => {});
+    return this.getCodes();
   }
 
   async bulkUpdateSettings(settings: Array<{ key: string; value: string }>) {
